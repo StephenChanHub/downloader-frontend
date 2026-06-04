@@ -39,18 +39,11 @@ const resources = [
   },
 ];
 
-const adminFiles = [
-  {
-    id: 101,
-    title: 'Q3 Financial Report - Final',
-    downloads: 142,
-  },
-  {
-    id: 102,
-    title: 'Employee Handbook V4',
-    downloads: 89,
-  },
-];
+const adminFiles = resources.map((resource) => ({
+  id: resource.id + 100,
+  title: resource.title,
+  downloads: resource.downloads,
+}));
 
 const copy = {
   en: {
@@ -60,6 +53,10 @@ const copy = {
     secureDoc: 'SecureDoc',
     privateResourceAccess: 'Private Resource Access',
     adminResourceAccess: 'Administrator Resource Access',
+    adminVerification: 'Administrator Verification',
+    adminVerificationDescription: 'Enter the administrator key to open file management.',
+    verifyAdmin: 'Verify Admin Key',
+    cancel: 'Cancel',
     enterAccessKey: 'ENTER YOUR ACCESS KEY',
     enterAdminKey: 'ENTER ADMIN KEY',
     accessKeyAria: 'Access key',
@@ -122,6 +119,10 @@ const copy = {
     secureDoc: 'SecureDoc',
     privateResourceAccess: '私有资源访问',
     adminResourceAccess: '管理员资源访问',
+    adminVerification: '管理员验证',
+    adminVerificationDescription: '请输入管理员密钥，验证成功后进入文件管理页面。',
+    verifyAdmin: '验证管理员密钥',
+    cancel: '取消',
     enterAccessKey: '输入访问密钥',
     enterAdminKey: '输入管理员密钥',
     accessKeyAria: '访问密钥',
@@ -209,6 +210,34 @@ function clearTimedSession(storageKey) {
 
 function isNonEmptyKey(key) {
   return key.trim().length > 0;
+}
+
+function parseFileSizeToBytes(size) {
+  const match = String(size).trim().match(/^([\d.]+)\s*(B|KB|MB|GB|TB)$/i);
+  if (!match) return 0;
+
+  const value = Number.parseFloat(match[1]);
+  const unit = match[2].toUpperCase();
+  const units = {
+    B: 1,
+    KB: 1024,
+    MB: 1024 ** 2,
+    GB: 1024 ** 3,
+    TB: 1024 ** 4,
+  };
+
+  return Number.isFinite(value) ? value * units[unit] : 0;
+}
+
+function formatFileSize(bytes) {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
+
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const unitIndex = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  const value = bytes / (1024 ** unitIndex);
+  const rounded = value >= 10 || unitIndex === 0 ? value.toFixed(1) : value.toFixed(2);
+
+  return `${rounded.replace(/\.0$/, '')} ${units[unitIndex]}`;
 }
 
 function formatRemainingTime(expiresAt) {
@@ -457,6 +486,70 @@ function LoginPage({ onUserLogin, onAdminLogin, t }) {
   );
 }
 
+function AdminGateModal({ t, onCancel, onAdminLogin }) {
+  const [key, setKey] = useState('');
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    const handleEscape = (event) => {
+      if (event.key === 'Escape') onCancel();
+    };
+
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [onCancel]);
+
+  const handleSubmit = (event) => {
+    event.preventDefault();
+
+    if (!isNonEmptyKey(key)) {
+      setError(t.emptyKeyError);
+      return;
+    }
+
+    setError('');
+    onAdminLogin(key);
+  };
+
+  return (
+    <div className="admin-gate-overlay" role="presentation" onMouseDown={onCancel}>
+      <section
+        className="admin-gate-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="adminGateTitle"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <div className="admin-gate-icon"><Icon name="lock" size={30} /></div>
+        <h2 id="adminGateTitle">{t.adminVerification}</h2>
+        <p>{t.adminVerificationDescription}</p>
+
+        <form onSubmit={handleSubmit}>
+          <label className="form-label" htmlFor="resourceAdminKey">{t.enterAdminKey}</label>
+          <input
+            id="resourceAdminKey"
+            className="text-input"
+            value={key}
+            onChange={(event) => setKey(event.target.value)}
+            type="password"
+            placeholder={t.adminKeyPlaceholder}
+            aria-label={t.adminKeyAria}
+            autoComplete="current-password"
+            autoFocus
+          />
+
+          {error && <p className="form-error" role="alert">{error}</p>}
+
+          <div className="admin-gate-actions">
+            <button className="secondary-button" type="button" onClick={onCancel}>{t.cancel}</button>
+            <button className="primary-button" type="submit">{t.verifyAdmin}</button>
+          </div>
+        </form>
+      </section>
+    </div>
+  );
+}
+
 function ResourceCard({ item, t }) {
   const handleDownload = (event) => {
     event.preventDefault();
@@ -486,13 +579,40 @@ function ResourceCard({ item, t }) {
   );
 }
 
-function ResourcesPage({ onLock, t, sessionExpiresAt, lastSyncMinutesAgo, lang }) {
+function ResourcesPage({ onLock, onAdminLogin, t, sessionExpiresAt, lastSyncMinutesAgo, lang }) {
   const [query, setQuery] = useState('');
+  const [adminGateOpen, setAdminGateOpen] = useState(false);
+  const secretTitleClicksRef = useRef([]);
+
   const filtered = useMemo(() => {
     const keyword = query.trim().toLowerCase();
     if (!keyword) return resources;
     return resources.filter((resource) => resource.title.toLowerCase().includes(keyword));
   }, [query]);
+
+  const resourceTotals = useMemo(() => {
+    const totalBytes = resources.reduce(
+      (sum, resource) => sum + parseFileSizeToBytes(resource.size),
+      0,
+    );
+
+    return {
+      fileCount: resources.length,
+      totalSize: formatFileSize(totalBytes),
+    };
+  }, []);
+
+  const revealAdminGate = () => {
+    const now = Date.now();
+    secretTitleClicksRef.current = [...secretTitleClicksRef.current, now].filter(
+      (time) => now - time < 1800,
+    );
+
+    if (secretTitleClicksRef.current.length >= 5) {
+      secretTitleClicksRef.current = [];
+      setAdminGateOpen(true);
+    }
+  };
 
   const handleDownloadAll = () => {
     // Front-end placeholder: request a batch download from your backend.
@@ -502,7 +622,13 @@ function ResourcesPage({ onLock, t, sessionExpiresAt, lastSyncMinutesAgo, lang }
   return (
     <main className="resources-page">
       <aside className="resources-sidebar">
-        <h1>{t.availableResourcesLine1}<br />{t.availableResourcesLine2}</h1>
+        <h1
+          className="hidden-admin-title"
+          onClick={revealAdminGate}
+          onMouseDown={(event) => event.preventDefault()}
+        >
+          {t.availableResourcesLine1}<br />{t.availableResourcesLine2}
+        </h1>
         <p>{t.resourcesDescription}</p>
 
         <div className="session-card">
@@ -529,11 +655,11 @@ function ResourcesPage({ onLock, t, sessionExpiresAt, lastSyncMinutesAgo, lang }
           <dl>
             <div>
               <dt>{t.totalFiles}</dt>
-              <dd>12</dd>
+              <dd>{resourceTotals.fileCount}</dd>
             </div>
             <div>
               <dt>{t.totalSize}</dt>
-              <dd>84.5 MB</dd>
+              <dd>{resourceTotals.totalSize}</dd>
             </div>
             <div>
               <dt>{t.lastSync}</dt>
@@ -550,6 +676,14 @@ function ResourcesPage({ onLock, t, sessionExpiresAt, lastSyncMinutesAgo, lang }
           <ResourceCard key={item.id} item={item} t={t} />
         ))}
       </section>
+
+      {adminGateOpen && (
+        <AdminGateModal
+          t={t}
+          onCancel={() => setAdminGateOpen(false)}
+          onAdminLogin={onAdminLogin}
+        />
+      )}
     </main>
   );
 }
@@ -718,7 +852,9 @@ export default function App() {
     setPage('resources');
   };
 
-  const handleAdminLogin = () => {
+  const handleAdminLogin = (adminKey = '') => {
+    if (!isNonEmptyKey(adminKey)) return;
+
     const expiresAt = createTimedSession(ADMIN_SESSION_STORAGE_KEY);
     setAdminExpiresAt(expiresAt);
     setPage('admin');
@@ -743,6 +879,7 @@ export default function App() {
       {page === 'resources' && isAccessValid && (
         <ResourcesPage
           onLock={handleLockUserSession}
+          onAdminLogin={handleAdminLogin}
           t={t}
           sessionExpiresAt={accessExpiresAt}
           lastSyncMinutesAgo={lastSyncMinutesAgo}

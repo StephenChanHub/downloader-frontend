@@ -818,3 +818,67 @@ th:nth-child(3) {
     width: 100%;
   }
 }
+
+.hidden-admin-title {
+  cursor: default;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.admin-gate-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(10px);
+}
+
+.admin-gate-modal {
+  width: 375px;
+  max-width: 100%;
+  border: 1px solid var(--line);
+  background: #fff;
+  padding: 28px 27px 27px;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.12);
+}
+
+.admin-gate-icon {
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  margin: 0 auto 13px;
+  background: var(--blue-soft);
+  color: #000;
+}
+
+.admin-gate-modal h2 {
+  margin: 0;
+  text-align: center;
+  font-size: 24px;
+  line-height: 1.15;
+  font-weight: 800;
+}
+
+.admin-gate-modal p {
+  margin: 9px 0 24px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.admin-gate-actions {
+  display: grid;
+  grid-template-columns: 1fr 1.2fr;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.admin-gate-actions .primary-button,
+.admin-gate-actions .secondary-button {
+  width: 100%;
+}
