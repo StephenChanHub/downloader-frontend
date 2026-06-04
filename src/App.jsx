@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
+const SESSION_DURATION_MS = 30 * 60 * 1000;
+const USER_SESSION_STORAGE_KEY = 'secure-doc-access-session';
+const ADMIN_SESSION_STORAGE_KEY = 'secure-doc-admin-session';
+
 const resources = [
   {
     id: 1,
@@ -60,24 +64,30 @@ const copy = {
     enterAdminKey: 'ENTER ADMIN KEY',
     accessKeyAria: 'Access key',
     adminKeyAria: 'Admin key',
+    accessKeyPlaceholder: 'Enter access key',
+    adminKeyPlaceholder: 'Enter administrator key',
     accessFiles: 'Access Files',
     unlockAdmin: 'Access Admin',
+    emptyKeyError: 'Please enter a valid key.',
     adminEntrance: 'Admin entrance',
     availableResourcesLine1: 'Available',
     availableResourcesLine2: 'Resources',
-    resourcesDescription: 'All documents are encrypted. Enter the file key to download.',
+    resourcesDescription: 'Access verified. One key unlocks all encrypted files for 30 minutes.',
     filterByName: 'Filter by name...',
     filterByNameAria: 'Filter by name',
     downloadAll: 'DOWNLOAD ALL',
-    downloadKey: 'FILE KEY',
-    enterFileKey: 'Enter file key',
     download: 'DOWNLOAD',
     totalFiles: 'Total Files',
     totalSize: 'Total Size',
     lastSync: 'Last Sync',
     lastSyncValue: '10 min ago',
-    backToLogin: 'Back to login',
+    backToLogin: 'Lock & return to login',
     resourcesGridAria: 'Available resources',
+    accessSessionActive: 'Access Session Active',
+    keyValidFor: 'Key valid for',
+    sessionNote: 'No need to enter the key again while the 30-minute session is active.',
+    sessionExpired: 'Your access key has expired. Please verify again.',
+    readyToDownload: 'Encrypted file unlocked for this session.',
     adminConsole: 'Admin Console',
     securityLevel: 'Security Level 4',
     adminNavigation: 'Admin navigation',
@@ -85,10 +95,9 @@ const copy = {
     uploadNewPdf: 'Upload New PDF',
     signOut: 'Sign Out',
     uploadResource: 'Upload Resource',
-    uploadDescription: 'All uploaded documents are encrypted and require a download key.',
+    uploadDescription: 'Uploaded documents are protected by the site-level access key session.',
     documentTitle: 'DOCUMENT TITLE',
     documentTitlePlaceholder: 'e.g., Annual Report',
-    downloadKeyPlaceholder: 'Set file download key',
     filePayload: 'FILE PAYLOAD',
     dropZoneText: 'Click to browse or drag',
     dropZonePdf: 'PDF here',
@@ -115,24 +124,30 @@ const copy = {
     enterAdminKey: '输入管理员密钥',
     accessKeyAria: '访问密钥',
     adminKeyAria: '管理员密钥',
+    accessKeyPlaceholder: '请输入访问密钥',
+    adminKeyPlaceholder: '请输入管理员密钥',
     accessFiles: '访问文件',
     unlockAdmin: '进入管理后台',
+    emptyKeyError: '请输入有效密钥。',
     adminEntrance: '管理员入口',
     availableResourcesLine1: '可用',
     availableResourcesLine2: '资源',
-    resourcesDescription: '所有文档均已加密，填写文件密钥后才可下载。',
+    resourcesDescription: '访问已验证，一个密钥可在 30 分钟内解锁所有加密文件。',
     filterByName: '按名称筛选...',
     filterByNameAria: '按名称筛选',
     downloadAll: '全部下载',
-    downloadKey: '文件密钥',
-    enterFileKey: '请输入文件密钥',
     download: '下载',
     totalFiles: '文件总数',
     totalSize: '文件总大小',
     lastSync: '最近同步',
     lastSyncValue: '10 分钟前',
-    backToLogin: '返回登录',
+    backToLogin: '锁定并返回登录',
     resourcesGridAria: '可用资源',
+    accessSessionActive: '访问会话已激活',
+    keyValidFor: '密钥剩余有效期',
+    sessionNote: '30 分钟会话有效期内，无需再次输入密钥。',
+    sessionExpired: '访问密钥已过期，请重新验证。',
+    readyToDownload: '当前会话已解锁该加密文件。',
     adminConsole: '管理控制台',
     securityLevel: '安全等级 4',
     adminNavigation: '管理员导航',
@@ -140,10 +155,9 @@ const copy = {
     uploadNewPdf: '上传新 PDF',
     signOut: '退出登录',
     uploadResource: '上传资源',
-    uploadDescription: '所有上传文档默认加密，下载时必须填写密钥。',
+    uploadDescription: '上传文档将由网站级访问密钥会话统一保护。',
     documentTitle: '文档标题',
     documentTitlePlaceholder: '例如：年度报告',
-    downloadKeyPlaceholder: '设置文件下载密钥',
     filePayload: '文件载荷',
     dropZoneText: '点击浏览或拖拽',
     dropZonePdf: 'PDF 到此处',
@@ -160,6 +174,46 @@ const copy = {
     deleteFile: '删除',
   },
 };
+
+function createTimedSession(storageKey) {
+  const expiresAt = Date.now() + SESSION_DURATION_MS;
+  localStorage.setItem(storageKey, JSON.stringify({ expiresAt }));
+  return expiresAt;
+}
+
+function readTimedSession(storageKey) {
+  try {
+    const raw = localStorage.getItem(storageKey);
+    if (!raw) return 0;
+
+    const session = JSON.parse(raw);
+    if (!session?.expiresAt || session.expiresAt <= Date.now()) {
+      localStorage.removeItem(storageKey);
+      return 0;
+    }
+
+    return session.expiresAt;
+  } catch {
+    localStorage.removeItem(storageKey);
+    return 0;
+  }
+}
+
+function clearTimedSession(storageKey) {
+  localStorage.removeItem(storageKey);
+}
+
+function isNonEmptyKey(key) {
+  return key.trim().length > 0;
+}
+
+function formatRemainingTime(expiresAt) {
+  const remainingMs = Math.max(0, expiresAt - Date.now());
+  const totalSeconds = Math.ceil(remainingMs / 1000);
+  const minutes = Math.floor(totalSeconds / 60).toString().padStart(2, '0');
+  const seconds = (totalSeconds % 60).toString().padStart(2, '0');
+  return `${minutes}:${seconds}`;
+}
 
 function Icon({ name, size = 18, strokeWidth = 2.2 }) {
   const common = {
@@ -277,15 +331,6 @@ function Icon({ name, size = 18, strokeWidth = 2.2 }) {
           <path d="m12 5 7 7-7 7" />
         </svg>
       );
-    case 'users':
-      return (
-        <svg {...common}>
-          <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-          <circle cx="9" cy="7" r="4" />
-          <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
-          <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-        </svg>
-      );
     default:
       return null;
   }
@@ -315,19 +360,10 @@ function LanguageSwitch({ lang, onLanguageChange, t }) {
   );
 }
 
-function AccessPill({ type, t, small = false }) {
-  const icon = type === 'shared' ? 'users' : 'lock';
-  return (
-    <span className={`access-pill ${small ? 'access-pill--small' : ''}`}>
-      <Icon name={icon} size={small ? 12 : 13} strokeWidth={2.3} />
-      {t.accessLabels[type]}
-    </span>
-  );
-}
-
-function LoginPage({ onNavigate, t }) {
+function LoginPage({ onUserLogin, onAdminLogin, t }) {
   const [mode, setMode] = useState('user');
-  const [key, setKey] = useState('••••••••••••');
+  const [key, setKey] = useState('');
+  const [error, setError] = useState('');
   const secretClicksRef = useRef([]);
   const isAdminMode = mode === 'admin';
 
@@ -341,11 +377,25 @@ function LoginPage({ onNavigate, t }) {
       secretClicksRef.current = [];
       setMode('admin');
       setKey('');
+      setError('');
     }
   };
 
-  const handleSubmit = () => {
-    onNavigate(isAdminMode ? 'admin' : 'resources');
+  const handleSubmit = (event) => {
+    event.preventDefault();
+
+    if (!isNonEmptyKey(key)) {
+      setError(t.emptyKeyError);
+      return;
+    }
+
+    setError('');
+    if (isAdminMode) {
+      onAdminLogin(key);
+      return;
+    }
+
+    onUserLogin(key);
   };
 
   return (
@@ -364,32 +414,37 @@ function LoginPage({ onNavigate, t }) {
         <h1>{t.secureDoc}</h1>
         <p>{isAdminMode ? t.adminResourceAccess : t.privateResourceAccess}</p>
 
-        <label className="form-label" htmlFor="accessKey">
-          {isAdminMode ? t.enterAdminKey : t.enterAccessKey}
-        </label>
-        <input
-          id="accessKey"
-          className="text-input"
-          value={key}
-          onChange={(event) => setKey(event.target.value)}
-          type="password"
-          aria-label={isAdminMode ? t.adminKeyAria : t.accessKeyAria}
-          autoComplete={isAdminMode ? 'current-password' : 'off'}
-        />
+        <form onSubmit={handleSubmit}>
+          <label className="form-label" htmlFor="accessKey">
+            {isAdminMode ? t.enterAdminKey : t.enterAccessKey}
+          </label>
+          <input
+            id="accessKey"
+            className="text-input"
+            value={key}
+            onChange={(event) => setKey(event.target.value)}
+            type="password"
+            placeholder={isAdminMode ? t.adminKeyPlaceholder : t.accessKeyPlaceholder}
+            aria-label={isAdminMode ? t.adminKeyAria : t.accessKeyAria}
+            autoComplete={isAdminMode ? 'current-password' : 'off'}
+          />
 
-        <button className="primary-button" onClick={handleSubmit}>
-          {isAdminMode ? t.unlockAdmin : t.accessFiles} <Icon name="arrow-right" size={17} />
-        </button>
+          {error && <p className="form-error" role="alert">{error}</p>}
+
+          <button className="primary-button" type="submit">
+            {isAdminMode ? t.unlockAdmin : t.accessFiles} <Icon name="arrow-right" size={17} />
+          </button>
+        </form>
       </section>
     </main>
   );
 }
 
 function ResourceCard({ item, t }) {
-  const [fileKey, setFileKey] = useState('');
-
   const handleDownload = (event) => {
     event.preventDefault();
+    // Front-end placeholder: connect this button to your backend download endpoint.
+    // The backend should verify the 30-minute access session before returning the file.
   };
 
   return (
@@ -405,26 +460,16 @@ function ResourceCard({ item, t }) {
         <span>{item.date}</span>
       </div>
 
-      <form className="resource-key-form" onSubmit={handleDownload}>
-        <label className="file-key-field">
-          <span>{t.downloadKey}</span>
-          <input
-            value={fileKey}
-            onChange={(event) => setFileKey(event.target.value)}
-            placeholder={t.enterFileKey}
-            type="password"
-            autoComplete="off"
-          />
-        </label>
-        <button className="outline-button" type="submit" disabled={!fileKey.trim()}>
-          <Icon name="download" size={15} strokeWidth={2.4} /> {t.download}
-        </button>
-      </form>
+      <p className="resource-download-note">{t.readyToDownload}</p>
+
+      <button className="outline-button resource-download-button" type="button" onClick={handleDownload}>
+        <Icon name="download" size={15} strokeWidth={2.4} /> {t.download}
+      </button>
     </article>
   );
 }
 
-function ResourcesPage({ onNavigate, t }) {
+function ResourcesPage({ onLock, t, sessionExpiresAt }) {
   const [query, setQuery] = useState('');
   const filtered = useMemo(() => {
     const keyword = query.trim().toLowerCase();
@@ -432,11 +477,22 @@ function ResourcesPage({ onNavigate, t }) {
     return resources.filter((resource) => resource.title.toLowerCase().includes(keyword));
   }, [query]);
 
+  const handleDownloadAll = () => {
+    // Front-end placeholder: request a batch download from your backend.
+    // The backend should reject the request when the access session is expired.
+  };
+
   return (
     <main className="resources-page">
       <aside className="resources-sidebar">
         <h1>{t.availableResourcesLine1}<br />{t.availableResourcesLine2}</h1>
         <p>{t.resourcesDescription}</p>
+
+        <div className="session-card">
+          <span>{t.accessSessionActive}</span>
+          <strong>{t.keyValidFor}: {formatRemainingTime(sessionExpiresAt)}</strong>
+          <small>{t.sessionNote}</small>
+        </div>
 
         <label className="filter-box">
           <Icon name="filter" size={18} />
@@ -448,7 +504,7 @@ function ResourcesPage({ onNavigate, t }) {
           />
         </label>
 
-        <button className="primary-button download-all">
+        <button className="primary-button download-all" onClick={handleDownloadAll}>
           <Icon name="download" size={18} /> {t.downloadAll}
         </button>
 
@@ -469,7 +525,7 @@ function ResourcesPage({ onNavigate, t }) {
           </dl>
         </div>
 
-        <button className="text-nav" onClick={() => onNavigate('login')}>{t.backToLogin}</button>
+        <button className="text-nav" onClick={onLock}>{t.backToLogin}</button>
       </aside>
 
       <section className="resources-grid" aria-label={t.resourcesGridAria}>
@@ -481,9 +537,8 @@ function ResourcesPage({ onNavigate, t }) {
   );
 }
 
-function AdminPage({ onNavigate, t }) {
+function AdminPage({ onSignOut, t }) {
   const [title, setTitle] = useState('');
-  const [downloadKey, setDownloadKey] = useState('');
   const [search, setSearch] = useState('');
   const fileInputRef = useRef(null);
 
@@ -509,7 +564,7 @@ function AdminPage({ onNavigate, t }) {
 
         <div className="admin-bottom">
           <button className="secondary-button">{t.uploadNewPdf}</button>
-          <button className="signout-button" onClick={() => onNavigate('login')}>
+          <button className="signout-button" onClick={onSignOut}>
             <Icon name="signout" size={17} /> {t.signOut}
           </button>
         </div>
@@ -522,7 +577,7 @@ function AdminPage({ onNavigate, t }) {
             <p>{t.uploadDescription}</p>
           </header>
 
-          <form className="upload-card" onSubmit={(event) => event.preventDefault()}>
+          <form className="upload-card upload-card--compact" onSubmit={(event) => event.preventDefault()}>
             <label className="form-label" htmlFor="documentTitle">{t.documentTitle}</label>
             <input
               id="documentTitle"
@@ -530,17 +585,6 @@ function AdminPage({ onNavigate, t }) {
               value={title}
               onChange={(event) => setTitle(event.target.value)}
               placeholder={t.documentTitlePlaceholder}
-            />
-
-            <label className="form-label" htmlFor="downloadKey">{t.downloadKey}</label>
-            <input
-              id="downloadKey"
-              className="text-input"
-              value={downloadKey}
-              onChange={(event) => setDownloadKey(event.target.value)}
-              placeholder={t.downloadKeyPlaceholder}
-              type="password"
-              autoComplete="off"
             />
 
             <label className="form-label">{t.filePayload}</label>
@@ -611,21 +655,77 @@ function AdminPage({ onNavigate, t }) {
 }
 
 export default function App() {
-  const [page, setPage] = useState('login');
   const [lang, setLang] = useState(() => localStorage.getItem('secure-doc-language') || 'en');
+  const [tick, setTick] = useState(Date.now());
+  const [accessExpiresAt, setAccessExpiresAt] = useState(() => readTimedSession(USER_SESSION_STORAGE_KEY));
+  const [adminExpiresAt, setAdminExpiresAt] = useState(() => readTimedSession(ADMIN_SESSION_STORAGE_KEY));
+  const [page, setPage] = useState(() => {
+    if (readTimedSession(ADMIN_SESSION_STORAGE_KEY)) return 'admin';
+    if (readTimedSession(USER_SESSION_STORAGE_KEY)) return 'resources';
+    return 'login';
+  });
+
   const t = copy[lang];
+  const isAccessValid = accessExpiresAt > tick;
+  const isAdminValid = adminExpiresAt > tick;
 
   useEffect(() => {
     document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'en';
     localStorage.setItem('secure-doc-language', lang);
   }, [lang]);
 
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setTick(Date.now());
+      setAccessExpiresAt(readTimedSession(USER_SESSION_STORAGE_KEY));
+      setAdminExpiresAt(readTimedSession(ADMIN_SESSION_STORAGE_KEY));
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    if (page === 'resources' && !isAccessValid) {
+      setPage('login');
+    }
+
+    if (page === 'admin' && !isAdminValid) {
+      setPage('login');
+    }
+  }, [isAccessValid, isAdminValid, page]);
+
+  const handleUserLogin = () => {
+    const expiresAt = createTimedSession(USER_SESSION_STORAGE_KEY);
+    setAccessExpiresAt(expiresAt);
+    setPage('resources');
+  };
+
+  const handleAdminLogin = () => {
+    const expiresAt = createTimedSession(ADMIN_SESSION_STORAGE_KEY);
+    setAdminExpiresAt(expiresAt);
+    setPage('admin');
+  };
+
+  const handleLockUserSession = () => {
+    clearTimedSession(USER_SESSION_STORAGE_KEY);
+    setAccessExpiresAt(0);
+    setPage('login');
+  };
+
+  const handleAdminSignOut = () => {
+    clearTimedSession(ADMIN_SESSION_STORAGE_KEY);
+    setAdminExpiresAt(0);
+    setPage('login');
+  };
+
   return (
     <>
       <LanguageSwitch lang={lang} onLanguageChange={setLang} t={t} />
-      {page === 'admin' && <AdminPage onNavigate={setPage} t={t} />}
-      {page === 'resources' && <ResourcesPage onNavigate={setPage} t={t} />}
-      {page === 'login' && <LoginPage onNavigate={setPage} t={t} />}
+      {page === 'admin' && isAdminValid && <AdminPage onSignOut={handleAdminSignOut} t={t} />}
+      {page === 'resources' && isAccessValid && (
+        <ResourcesPage onLock={handleLockUserSession} t={t} sessionExpiresAt={accessExpiresAt} />
+      )}
+      {page === 'login' && <LoginPage onUserLogin={handleUserLogin} onAdminLogin={handleAdminLogin} t={t} />}
     </>
   );
 }
