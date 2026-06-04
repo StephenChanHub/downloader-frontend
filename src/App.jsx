@@ -80,7 +80,9 @@ const copy = {
     totalFiles: 'Total Files',
     totalSize: 'Total Size',
     lastSync: 'Last Sync',
-    lastSyncValue: '10 min ago',
+    syncMinutesAgo: 'min ago',
+    syncHoursAgo: 'h ago',
+    downloadsBadge: 'downloads',
     backToLogin: 'Lock & return to login',
     resourcesGridAria: 'Available resources',
     accessSessionActive: 'Access Session Active',
@@ -140,7 +142,9 @@ const copy = {
     totalFiles: '文件总数',
     totalSize: '文件总大小',
     lastSync: '最近同步',
-    lastSyncValue: '10 分钟前',
+    syncMinutesAgo: '分钟前',
+    syncHoursAgo: '小时前',
+    downloadsBadge: '次下载',
     backToLogin: '锁定并返回登录',
     resourcesGridAria: '可用资源',
     accessSessionActive: '访问会话已激活',
@@ -213,6 +217,19 @@ function formatRemainingTime(expiresAt) {
   const minutes = Math.floor(totalSeconds / 60).toString().padStart(2, '0');
   const seconds = (totalSeconds % 60).toString().padStart(2, '0');
   return `${minutes}:${seconds}`;
+}
+
+function createRandomSyncMinutes() {
+  return Math.floor(Math.random() * (24 * 60 - 1)) + 1;
+}
+
+function formatSyncTime(minutesAgo, t, lang) {
+  if (minutesAgo < 60) {
+    return lang === 'zh' ? `${minutesAgo} ${t.syncMinutesAgo}` : `${minutesAgo} ${t.syncMinutesAgo}`;
+  }
+
+  const hoursAgo = Math.floor(minutesAgo / 60);
+  return lang === 'zh' ? `${hoursAgo} ${t.syncHoursAgo}` : `${hoursAgo}${t.syncHoursAgo}`;
 }
 
 function Icon({ name, size = 18, strokeWidth = 2.2 }) {
@@ -451,13 +468,13 @@ function ResourceCard({ item, t }) {
     <article className="resource-card">
       <div className="resource-card__top">
         <div className="resource-icon"><Icon name={item.icon} size={25} strokeWidth={2.2} /></div>
+        <span className="download-count-badge">{item.downloads} {t.downloadsBadge}</span>
       </div>
 
       <h2>{item.title}</h2>
 
-      <div className="resource-meta">
+      <div className="resource-meta resource-meta--single">
         <span>{item.size}</span>
-        <span>{item.date}</span>
       </div>
 
       <p className="resource-download-note">{t.readyToDownload}</p>
@@ -469,7 +486,7 @@ function ResourceCard({ item, t }) {
   );
 }
 
-function ResourcesPage({ onLock, t, sessionExpiresAt }) {
+function ResourcesPage({ onLock, t, sessionExpiresAt, lastSyncMinutesAgo, lang }) {
   const [query, setQuery] = useState('');
   const filtered = useMemo(() => {
     const keyword = query.trim().toLowerCase();
@@ -520,7 +537,7 @@ function ResourcesPage({ onLock, t, sessionExpiresAt }) {
             </div>
             <div>
               <dt>{t.lastSync}</dt>
-              <dd>{t.lastSyncValue}</dd>
+              <dd>{formatSyncTime(lastSyncMinutesAgo, t, lang)}</dd>
             </div>
           </dl>
         </div>
@@ -657,6 +674,7 @@ function AdminPage({ onSignOut, t }) {
 export default function App() {
   const [lang, setLang] = useState(() => localStorage.getItem('secure-doc-language') || 'en');
   const [tick, setTick] = useState(Date.now());
+  const [lastSyncMinutesAgo] = useState(createRandomSyncMinutes);
   const [accessExpiresAt, setAccessExpiresAt] = useState(() => readTimedSession(USER_SESSION_STORAGE_KEY));
   const [adminExpiresAt, setAdminExpiresAt] = useState(() => readTimedSession(ADMIN_SESSION_STORAGE_KEY));
   const [page, setPage] = useState(() => {
@@ -723,7 +741,13 @@ export default function App() {
       <LanguageSwitch lang={lang} onLanguageChange={setLang} t={t} />
       {page === 'admin' && isAdminValid && <AdminPage onSignOut={handleAdminSignOut} t={t} />}
       {page === 'resources' && isAccessValid && (
-        <ResourcesPage onLock={handleLockUserSession} t={t} sessionExpiresAt={accessExpiresAt} />
+        <ResourcesPage
+          onLock={handleLockUserSession}
+          t={t}
+          sessionExpiresAt={accessExpiresAt}
+          lastSyncMinutesAgo={lastSyncMinutesAgo}
+          lang={lang}
+        />
       )}
       {page === 'login' && <LoginPage onUserLogin={handleUserLogin} onAdminLogin={handleAdminLogin} t={t} />}
     </>
