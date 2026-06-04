@@ -6,7 +6,6 @@ const resources = [
     title: 'IELTS Preparation Guide 2024',
     size: '5.2 MB',
     date: 'Oct 12, 2023',
-    access: 'private',
     icon: 'file',
     downloads: 142,
   },
@@ -15,7 +14,6 @@ const resources = [
     title: 'Q4 Financial Report - Consolidated Draft',
     size: '12.8 MB',
     date: 'Oct 10, 2023',
-    access: 'shared',
     icon: 'chart',
     downloads: 89,
   },
@@ -24,7 +22,6 @@ const resources = [
     title: 'User Manual v2.1.4',
     size: '1.4 MB',
     date: 'Sep 28, 2023',
-    access: 'encrypted',
     icon: 'book',
     downloads: 61,
   },
@@ -33,7 +30,6 @@ const resources = [
     title: 'NDA Template - Employee Standard',
     size: '450 KB',
     date: 'Sep 15, 2023',
-    access: 'private',
     icon: 'gavel',
     downloads: 34,
   },
@@ -43,13 +39,11 @@ const adminFiles = [
   {
     id: 101,
     title: 'Q3 Financial Report - Final',
-    access: 'private',
     downloads: 142,
   },
   {
     id: 102,
     title: 'Employee Handbook V4',
-    access: 'shared',
     downloads: 89,
   },
 ];
@@ -71,10 +65,12 @@ const copy = {
     adminEntrance: 'Admin entrance',
     availableResourcesLine1: 'Available',
     availableResourcesLine2: 'Resources',
-    resourcesDescription: 'Browse and download securely shared documents.',
+    resourcesDescription: 'All documents are encrypted. Enter the file key to download.',
     filterByName: 'Filter by name...',
     filterByNameAria: 'Filter by name',
     downloadAll: 'DOWNLOAD ALL',
+    downloadKey: 'FILE KEY',
+    enterFileKey: 'Enter file key',
     download: 'DOWNLOAD',
     totalFiles: 'Total Files',
     totalSize: 'Total Size',
@@ -89,35 +85,24 @@ const copy = {
     uploadNewPdf: 'Upload New PDF',
     signOut: 'Sign Out',
     uploadResource: 'Upload Resource',
-    uploadDescription: 'Securely distribute new documents.',
+    uploadDescription: 'All uploaded documents are encrypted and require a download key.',
     documentTitle: 'DOCUMENT TITLE',
     documentTitlePlaceholder: 'e.g., Annual Report',
-    accessLevel: 'ACCESS LEVEL',
+    downloadKeyPlaceholder: 'Set file download key',
     filePayload: 'FILE PAYLOAD',
     dropZoneText: 'Click to browse or drag',
     dropZonePdf: 'PDF here',
     maxSize: 'Max size: 50MB',
     processUpload: 'Process Upload',
     resourceManagement: 'Resource Management',
-    managementDescription: 'Active files currently distributed.',
+    managementDescription: 'Encrypted files currently distributed.',
     searchResources: 'Search resources...',
     searchResourcesAria: 'Search resources',
     managementTableAria: 'Resource management table',
     tableTitle: 'TITLE',
-    tableAccess: 'ACCESS',
     tableDownloads: 'DOWNLOADS',
     tableActions: 'ACTIONS',
     deleteFile: 'Delete',
-    accessLabels: {
-      private: 'PRIVATE',
-      shared: 'SHARED',
-      encrypted: 'ENCRYPTED',
-    },
-    accessOptions: {
-      private: 'Private (Key Required)',
-      shared: 'Shared',
-      encrypted: 'Encrypted',
-    },
   },
   zh: {
     languageLabel: '语言',
@@ -135,10 +120,12 @@ const copy = {
     adminEntrance: '管理员入口',
     availableResourcesLine1: '可用',
     availableResourcesLine2: '资源',
-    resourcesDescription: '浏览并安全下载共享文档。',
+    resourcesDescription: '所有文档均已加密，填写文件密钥后才可下载。',
     filterByName: '按名称筛选...',
     filterByNameAria: '按名称筛选',
     downloadAll: '全部下载',
+    downloadKey: '文件密钥',
+    enterFileKey: '请输入文件密钥',
     download: '下载',
     totalFiles: '文件总数',
     totalSize: '文件总大小',
@@ -153,35 +140,24 @@ const copy = {
     uploadNewPdf: '上传新 PDF',
     signOut: '退出登录',
     uploadResource: '上传资源',
-    uploadDescription: '安全分发新文档。',
+    uploadDescription: '所有上传文档默认加密，下载时必须填写密钥。',
     documentTitle: '文档标题',
     documentTitlePlaceholder: '例如：年度报告',
-    accessLevel: '访问级别',
+    downloadKeyPlaceholder: '设置文件下载密钥',
     filePayload: '文件载荷',
     dropZoneText: '点击浏览或拖拽',
     dropZonePdf: 'PDF 到此处',
     maxSize: '最大：50MB',
     processUpload: '处理上传',
     resourceManagement: '资源管理',
-    managementDescription: '当前正在分发的文件。',
+    managementDescription: '当前正在分发的加密文件。',
     searchResources: '搜索资源...',
     searchResourcesAria: '搜索资源',
     managementTableAria: '资源管理表格',
     tableTitle: '标题',
-    tableAccess: '访问权限',
     tableDownloads: '下载次数',
     tableActions: '操作',
     deleteFile: '删除',
-    accessLabels: {
-      private: '私密',
-      shared: '共享',
-      encrypted: '加密',
-    },
-    accessOptions: {
-      private: '私密（需要密钥）',
-      shared: '共享',
-      encrypted: '加密',
-    },
   },
 };
 
@@ -410,11 +386,16 @@ function LoginPage({ onNavigate, t }) {
 }
 
 function ResourceCard({ item, t }) {
+  const [fileKey, setFileKey] = useState('');
+
+  const handleDownload = (event) => {
+    event.preventDefault();
+  };
+
   return (
     <article className="resource-card">
       <div className="resource-card__top">
         <div className="resource-icon"><Icon name={item.icon} size={25} strokeWidth={2.2} /></div>
-        <AccessPill type={item.access} t={t} />
       </div>
 
       <h2>{item.title}</h2>
@@ -424,9 +405,21 @@ function ResourceCard({ item, t }) {
         <span>{item.date}</span>
       </div>
 
-      <button className="outline-button">
-        <Icon name="download" size={15} strokeWidth={2.4} /> {t.download}
-      </button>
+      <form className="resource-key-form" onSubmit={handleDownload}>
+        <label className="file-key-field">
+          <span>{t.downloadKey}</span>
+          <input
+            value={fileKey}
+            onChange={(event) => setFileKey(event.target.value)}
+            placeholder={t.enterFileKey}
+            type="password"
+            autoComplete="off"
+          />
+        </label>
+        <button className="outline-button" type="submit" disabled={!fileKey.trim()}>
+          <Icon name="download" size={15} strokeWidth={2.4} /> {t.download}
+        </button>
+      </form>
     </article>
   );
 }
@@ -490,7 +483,7 @@ function ResourcesPage({ onNavigate, t }) {
 
 function AdminPage({ onNavigate, t }) {
   const [title, setTitle] = useState('');
-  const [access, setAccess] = useState('private');
+  const [downloadKey, setDownloadKey] = useState('');
   const [search, setSearch] = useState('');
   const fileInputRef = useRef(null);
 
@@ -539,14 +532,16 @@ function AdminPage({ onNavigate, t }) {
               placeholder={t.documentTitlePlaceholder}
             />
 
-            <label className="form-label" htmlFor="accessLevel">{t.accessLevel}</label>
-            <div className="select-wrap">
-              <select id="accessLevel" value={access} onChange={(event) => setAccess(event.target.value)}>
-                <option value="private">{t.accessOptions.private}</option>
-                <option value="shared">{t.accessOptions.shared}</option>
-                <option value="encrypted">{t.accessOptions.encrypted}</option>
-              </select>
-            </div>
+            <label className="form-label" htmlFor="downloadKey">{t.downloadKey}</label>
+            <input
+              id="downloadKey"
+              className="text-input"
+              value={downloadKey}
+              onChange={(event) => setDownloadKey(event.target.value)}
+              placeholder={t.downloadKeyPlaceholder}
+              type="password"
+              autoComplete="off"
+            />
 
             <label className="form-label">{t.filePayload}</label>
             <button
@@ -586,7 +581,6 @@ function AdminPage({ onNavigate, t }) {
               <thead>
                 <tr>
                   <th>{t.tableTitle}</th>
-                  <th>{t.tableAccess}</th>
                   <th>{t.tableDownloads}</th>
                   <th>{t.tableActions}</th>
                 </tr>
@@ -599,7 +593,6 @@ function AdminPage({ onNavigate, t }) {
                         <Icon name="file" size={18} /> {file.title}
                       </span>
                     </td>
-                    <td><AccessPill type={file.access} t={t} small /></td>
                     <td>{file.downloads}</td>
                     <td>
                       <button className="icon-button" aria-label={`${t.deleteFile} ${file.title}`}>
