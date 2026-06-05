@@ -798,6 +798,7 @@ function ResourcesPage({ onLock, onAdminLogin, t, sessionExpiresAt, lastSyncMinu
 
 function AdminPage({ onSignOut, t }) {
   const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
   const [search, setSearch] = useState('');
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -841,9 +842,11 @@ function AdminPage({ onSignOut, t }) {
       const formData = new FormData();
       formData.append('file', selectedFile);
       if (title.trim()) formData.append('title', title.trim());
+      if (description.trim()) formData.append('description', description.trim());
 
       await adminUploadFile(formData);
       setTitle('');
+      setDescription('');
       setSelectedFile(null);
       if (fileInputRef.current) fileInputRef.current.value = '';
       await loadFiles();
@@ -930,6 +933,17 @@ function AdminPage({ onSignOut, t }) {
               value={title}
               onChange={(event) => setTitle(event.target.value)}
               placeholder={t.documentTitlePlaceholder}
+            />
+
+            <label className="form-label" htmlFor="documentDescription">DESCRIPTION / 描述</label>
+            <textarea
+              id="documentDescription"
+              className="text-input"
+              value={description}
+              onChange={(event) => setDescription(event.target.value)}
+              placeholder="Optional description / notes"
+              rows={3}
+              style={{ height: 'auto', padding: '8px 13px', resize: 'vertical' }}
             />
 
             <label className="form-label">{t.filePayload}</label>
