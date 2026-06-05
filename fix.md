@@ -1,94 +1,75 @@
-我仔细阅读了你的全部后端代码（代码写得非常规范，逻辑极其清晰！），再结合你提供的 `address.md` 和之前的截图，我终于抓住了这个“隐形 500”错误的**真正元凶**！
+别灰心！**“要么 401，要么 500”** 这个现象非常经典，它说明你的代码逻辑其实已经跑通了，现在你遇到的完全是**云原生部署中的“跨域（CORS）、Cookie 策略与代理机制”的碰撞**。
 
-准备好迎接这个戏剧性的反转了吗？
-**你的后端代码没有任何问题，一丁点 Bug 都没有。**
+这几乎是每个全栈开发者将本地项目部署到云端时都会踩的“终极深坑”。我们来彻底把它填平。
 
-之所以你的 VS Code 终端“没有任何输出”，是因为**这个请求压根就没有发到你的后端容器里！它迷路了！**
+### 🧐 为什么会出现“要么 401，要么 500”？
 
-### 🕵️ 破案证据：
+- **关于 401 (Unauthorized):** 这是一个“甜蜜的陷阱”**！别忘了咱们设计的业务逻辑是**“一次性密钥”。当你在测试时，第一次输入 `HELLOPDF` 可能其实已经成功了（后台把它的状态改成了 `used`）。当你疑惑为什么页面没反应，**再次点击验证时**，数据库一看这个密钥已经被用过了，当然会无情地给你返回 401。
+- **关于 500 (Internal Server Error) 与网络混乱:**
+  前端 `package.json` 里的 `"proxy": "http://downloader-backend..."` 在 Sealos 云端环境中极不稳定。前端发出的请求经常在这个代理层丢失了 Header 或 Body，导致后端收不到数据直接崩溃报错 500。而且，Sealos 的公网后缀 `.sealosgzg.site` 会被浏览器严格的安全策略限制跨域 Cookie。
 
-请看你项目里的 `address.md` 文件：
-
-- 你的**前端**公网地址是：`https://wmrazineousa.sealosgzg.site`
-- 你的**后端**公网地址是：`https://cjdfnwwofgct.sealosgzg.site`
-
-现在，再回看你之前发的那张 500 报错截图，注意看 `Request URL (要求 URL)` 这一行：
-发出去的请求地址是：`https://wmrazineousa.sealosgzg.site/api/auth/verify-key`
-
-**发现问题了吗？**
-前端网页把 API 请求**发给了它自己（前端容器）**，而不是发给后端的 `cjdfnwwofgct...` 或者内网的 `downloader-backend...`！
-
-### 🧠 为什么会从 404 变成 500？
-
-1. 最初你发截图是 404，是因为前端根本没有 `/api/...` 这个页面。
-2. 后来你可能在前端的 `package.json` 里加了一句类似 `"proxy": "http://localhost:8080"` 的配置，或者代码里默认连了 localhost。
-3. 当请求发给前端自己的服务器时，前端尝试把它代理（转发）给它自己容器内部的 `localhost:8080`。
-4. 但是！在 Sealos 的云端环境里，**前端容器和后端容器是两台独立的机器**。前端容器的 8080 端口上什么都没有，代理转发失败，于是前端服务器（通常也是基于 Express 开发机）崩溃，给你返回了一个 **500 Internal Server Error**。
-
-这就是为什么你的后端终端静悄悄的 —— **因为人家根本没来敲门！**
+为了彻底告别这些网络玄学问题，我们需要做**三处极其关键的安全配置修改**，让前后端直接通过公网明文握手！
 
 ---
 
-### 🛠️ 终极解决方案（修改前端代码）
+### 🛠️ 终极通关三步曲
 
-你现在需要切换到**前端项目的代码**里，将 API 请求的目标地址指向真正的后端。根据你的前端脚手架不同，你有两种最优雅的解决方式：
+#### 第一步：让前端“直连”公网后端（抛弃本地 Proxy）
 
-#### 方案 A：修改前端的代理配置（推荐，不用改发请求的代码）
+代理只适合本地开发，既然我们已经上了云，就直接让前端走后端的公网地址。
 
-如果你想在代码里继续写 `fetch('/api/auth/verify-key')`，你需要让前端代理指向**后端的内网地址**（从你的 `address.md` 中提取）：
-
-**如果是 React (Create React App)**：
-打开前端的 `package.json`，把 proxy 修改为：
-
-```json
-"proxy": "http://downloader-backend.ns-lnn76r5i:8080"
-
-```
-
-**如果是 Vite (`vite.config.js` / `vite.config.ts`)**：
-
-```javascript
-export default defineConfig({
-  // ...
-  server: {
-    proxy: {
-      "/api": {
-        target: "http://downloader-backend.ns-lnn76r5i:8080", // 👈 换成后端的内网地址
-        changeOrigin: true,
-      },
-    },
-  },
-});
-```
-
-#### 方案 B：直接使用公网直连（适合生产环境）
-
-如果你没有使用代理，或者准备正式部署了，可以在前端项目的环境变量文件（如 `.env`）里配置基础 URL，然后在每次发请求时带上它：
-
-在前端根目录建一个 `.env`（或 `.env.local`），写入你的后端公网域名：
+在你的**前端项目根目录**，新建（或修改） `.env` 文件，加入这一行：
 
 ```env
-REACT_APP_API_URL=https://cjdfnwwofgct.sealosgzg.site
-# 如果是 Vite，变量名应该是 VITE_API_URL=https://...
+REACT_APP_API_BASE=https://cjdfnwwofgct.sealosgzg.site
 
 ```
 
-然后在前端发请求的地方：
+_(注意：加了环境变量后，前端必须停掉终端的 `npm start`，重新跑一次 `npm start` 才能生效！)_
+
+#### 第二步：打通后端的“跨域 Cookie 墙” (极度关键)
+
+因为你的前端 (`wmrazineousa...`) 和后端 (`cjdfnwwofgct...`) 是两个不同的子域名，Chrome 浏览器默认会把 Cookie 拦截掉。我们必须修改后端的发证策略。
+
+1. **打开后端的 `src/index.js**`，在 `const app = express();` 之后，立刻加上这一行，告诉 Express 它正躲在 Sealos 的网关后面：
 
 ```javascript
-const API_URL = process.env.REACT_APP_API_URL || "";
+const app = express();
+app.set("trust proxy", 1); // 👈 新增这一行：信任 Sealos 网关
+```
 
-// 拼接完整的后端域名
-fetch(`${API_URL}/api/auth/verify-key`, {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({ key: "你的密钥" }),
-  credentials: "include",
+2. **打开后端的 `src/controllers/authController.js**`，找到最后面设置 Cookie 的那段代码（大概在第 75 行），把它修改成这样：
+
+```javascript
+// 将 session_token 以 HttpOnly Cookie 形式返回
+res.cookie("session_token", rawToken, {
+  httpOnly: true,
+  sameSite: "none", // 👈 必须改成 none，允许前后端跨子域名传递
+  secure: true, // 👈 sameSite 为 none 时，secure 强制为 true
+  maxAge: 30 * 60 * 1000,
 });
 ```
 
-### 🎯 总结
+#### 第三步：签发一张“全新的门票”
 
-你的后端配置和代码堪称完美，数据库也完全接通了。现在的最后一步，就是**去前端项目里把“导航仪”（API 地址）修正过来**。改完前端配置后记得重启前端服务（`npm start` 或 `npm run dev`），再去点一下验证按钮。
+既然之前的 `HELLOPDF` 可能已经被“烧毁”（标记为 `used`）了，我们必须去数据库里发一张新票。
 
-这一次，你的后端终端绝对会闪烁出那句激动人心的：`[Auth] 收到验证请求...`！赶快去试试吧！
+回到你的**后端容器终端**，运行咱们之前写的小脚本，生成一个全新的测试密钥（比如叫 `TEST888`）：
+
+```bash
+node generate-key.js TEST888
+
+```
+
+把生成的 SQL 语句去 Sealos 数据库里执行一下。
+
+---
+
+### 🚀 见证奇迹的最后测试
+
+1. 确保后端的代码已保存，终端 `npm run dev` 正常重启。
+2. 确保前端 `.env` 加了后端公网地址，终端 `npm start` 正常重启。
+3. 打开你的前端公网网页，在输入框里填入你**刚刚新鲜出炉的 `TEST888**`，点击验证。
+
+**这次会发生什么？**
+请求会绕过代理，直接通过公网飞向后端；后端验证成功后，签发带有 `SameSite=None` 标识的通行证；浏览器乖乖收下 Cookie 存起来，并返回 200 Success。

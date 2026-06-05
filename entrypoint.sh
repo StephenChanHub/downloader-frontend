@@ -11,6 +11,12 @@ fi
 # Development environment commands
 dev_commands() {
     echo "Running React development environment..."
+
+    # Set backend API URL so the app calls the backend directly.
+    # Defaults to the production backend; override via Sealos env var if needed.
+    export REACT_APP_API_BASE="${REACT_APP_API_BASE:-https://cjdfnwwofgct.sealosgzg.site}"
+    echo "Using REACT_APP_API_BASE=$REACT_APP_API_BASE"
+
     npm run start
 }
 
