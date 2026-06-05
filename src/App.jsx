@@ -1,49 +1,90 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { adminLogin, adminListFiles, adminUploadFile, adminDeleteFile } from './api/admin';
+import { verifyAccessKey } from './api/auth';
+import { fetchFileList, downloadFile } from './api/files';
+import { formatFileSize, formatRemainingTime } from './utils/format';
 
-const SESSION_DURATION_MS = 30 * 60 * 1000;
+// ---- constants ------------------------------------------------------------
+
+const SESSION_DURATION_MS = 30 * 60 * 1000; // user cookie session
+const ADMIN_SESSION_MS = 24 * 60 * 60 * 1000; // admin JWT
 const USER_SESSION_STORAGE_KEY = 'secure-doc-access-session';
 const ADMIN_SESSION_STORAGE_KEY = 'secure-doc-admin-session';
 
-const resources = [
-  {
-    id: 1,
-    title: 'IELTS Preparation Guide 2024',
-    size: '5.2 MB',
-    date: 'Oct 12, 2023',
-    icon: 'file',
-    downloads: 142,
-  },
-  {
-    id: 2,
-    title: 'Q4 Financial Report - Consolidated Draft',
-    size: '12.8 MB',
-    date: 'Oct 10, 2023',
-    icon: 'chart',
-    downloads: 89,
-  },
-  {
-    id: 3,
-    title: 'User Manual v2.1.4',
-    size: '1.4 MB',
-    date: 'Sep 28, 2023',
-    icon: 'book',
-    downloads: 61,
-  },
-  {
-    id: 4,
-    title: 'NDA Template - Employee Standard',
-    size: '450 KB',
-    date: 'Sep 15, 2023',
-    icon: 'gavel',
-    downloads: 34,
-  },
-];
+// ---- local-storage session helpers ----------------------------------------
 
-const adminFiles = resources.map((resource) => ({
-  id: resource.id + 100,
-  title: resource.title,
-  downloads: resource.downloads,
-}));
+function persistUserSession(expiresAtISO) {
+  const expiresAt = Date.parse(expiresAtISO) || Date.now() + SESSION_DURATION_MS;
+  localStorage.setItem(USER_SESSION_STORAGE_KEY, JSON.stringify({ expiresAt }));
+  return expiresAt;
+}
+
+function readUserSession() {
+  try {
+    const raw = localStorage.getItem(USER_SESSION_STORAGE_KEY);
+    if (!raw) return 0;
+    const { expiresAt } = JSON.parse(raw);
+    if (!expiresAt || expiresAt <= Date.now()) {
+      localStorage.removeItem(USER_SESSION_STORAGE_KEY);
+      return 0;
+    }
+    return expiresAt;
+  } catch {
+    localStorage.removeItem(USER_SESSION_STORAGE_KEY);
+    return 0;
+  }
+}
+
+function persistAdminSession() {
+  const expiresAt = Date.now() + ADMIN_SESSION_MS;
+  localStorage.setItem(ADMIN_SESSION_STORAGE_KEY, JSON.stringify({ expiresAt }));
+  return expiresAt;
+}
+
+function readAdminSession() {
+  try {
+    const raw = localStorage.getItem(ADMIN_SESSION_STORAGE_KEY);
+    if (!raw) return 0;
+    const { expiresAt } = JSON.parse(raw);
+    if (!expiresAt || expiresAt <= Date.now()) {
+      localStorage.removeItem(ADMIN_SESSION_STORAGE_KEY);
+      return 0;
+    }
+    return expiresAt;
+  } catch {
+    localStorage.removeItem(ADMIN_SESSION_STORAGE_KEY);
+    return 0;
+  }
+}
+
+function clearUserSession() {
+  localStorage.removeItem(USER_SESSION_STORAGE_KEY);
+}
+
+function clearAdminSession() {
+  localStorage.removeItem(ADMIN_SESSION_STORAGE_KEY);
+  localStorage.removeItem('admin_token');
+}
+
+function isNonEmptyKey(key) {
+  return key.trim().length > 0;
+}
+
+function createRandomSyncMinutes() {
+  return Math.floor(Math.random() * (24 * 60 - 1)) + 1;
+}
+
+function formatSyncTime(minutesAgo, lang) {
+  if (minutesAgo < 60) {
+    return lang === 'zh'
+      ? `${minutesAgo} 分钟前`
+      : `${minutesAgo} min ago`;
+  }
+  const hoursAgo = Math.floor(minutesAgo / 60);
+  return lang === 'zh' ? `${hoursAgo} 小时前` : `${hoursAgo} h ago`;
+}
+
+// ---- i18n -----------------------------------------------------------------
 
 const copy = {
   en: {
@@ -100,7 +141,7 @@ const copy = {
     filePayload: 'FILE PAYLOAD',
     dropZoneText: 'Click to browse or drag',
     dropZonePdf: 'PDF here',
-    maxSize: 'Max size: 50MB',
+    maxSize: 'Max size: 100MB',
     processUpload: 'Process Upload',
     resourceManagement: 'Resource Management',
     managementDescription: 'Encrypted files currently distributed.',
@@ -111,6 +152,18 @@ const copy = {
     tableDownloads: 'DOWNLOADS',
     tableActions: 'ACTIONS',
     deleteFile: 'Delete',
+    deleteConfirm: 'Are you sure you want to delete "{title}"? This action cannot be undone.',
+    uploadSuccess: 'File uploaded successfully.',
+    uploadError: 'Upload failed.',
+    deleteSuccess: 'File deleted.',
+    deleteError: 'Delete failed.',
+    loadError: 'Failed to load files.',
+    loginError: 'Login failed.',
+    networkError: 'Network error. Please check your connection.',
+    noFiles: 'No files available.',
+    noFilesAdmin: 'No files in the vault yet. Upload your first PDF above.',
+    downloading: 'Downloading...',
+    uploading: 'Uploading...',
   },
   zh: {
     languageLabel: '语言',
@@ -166,7 +219,7 @@ const copy = {
     filePayload: '文件载荷',
     dropZoneText: '点击浏览或拖拽',
     dropZonePdf: 'PDF 到此处',
-    maxSize: '最大：50MB',
+    maxSize: '最大：100MB',
     processUpload: '处理上传',
     resourceManagement: '资源管理',
     managementDescription: '当前正在分发的加密文件。',
@@ -177,89 +230,22 @@ const copy = {
     tableDownloads: '下载次数',
     tableActions: '操作',
     deleteFile: '删除',
+    deleteConfirm: '确定要删除"{title}"吗？此操作不可撤销。',
+    uploadSuccess: '文件上传成功。',
+    uploadError: '上传失败。',
+    deleteSuccess: '文件已删除。',
+    deleteError: '删除失败。',
+    loadError: '加载文件失败。',
+    loginError: '登录失败。',
+    networkError: '网络错误，请检查网络连接。',
+    noFiles: '暂无可用文件。',
+    noFilesAdmin: '保险库中暂无文件，请上传您的第一个 PDF。',
+    downloading: '下载中...',
+    uploading: '上传中...',
   },
 };
 
-function createTimedSession(storageKey) {
-  const expiresAt = Date.now() + SESSION_DURATION_MS;
-  localStorage.setItem(storageKey, JSON.stringify({ expiresAt }));
-  return expiresAt;
-}
-
-function readTimedSession(storageKey) {
-  try {
-    const raw = localStorage.getItem(storageKey);
-    if (!raw) return 0;
-
-    const session = JSON.parse(raw);
-    if (!session?.expiresAt || session.expiresAt <= Date.now()) {
-      localStorage.removeItem(storageKey);
-      return 0;
-    }
-
-    return session.expiresAt;
-  } catch {
-    localStorage.removeItem(storageKey);
-    return 0;
-  }
-}
-
-function clearTimedSession(storageKey) {
-  localStorage.removeItem(storageKey);
-}
-
-function isNonEmptyKey(key) {
-  return key.trim().length > 0;
-}
-
-function parseFileSizeToBytes(size) {
-  const match = String(size).trim().match(/^([\d.]+)\s*(B|KB|MB|GB|TB)$/i);
-  if (!match) return 0;
-
-  const value = Number.parseFloat(match[1]);
-  const unit = match[2].toUpperCase();
-  const units = {
-    B: 1,
-    KB: 1024,
-    MB: 1024 ** 2,
-    GB: 1024 ** 3,
-    TB: 1024 ** 4,
-  };
-
-  return Number.isFinite(value) ? value * units[unit] : 0;
-}
-
-function formatFileSize(bytes) {
-  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
-
-  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-  const unitIndex = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
-  const value = bytes / (1024 ** unitIndex);
-  const rounded = value >= 10 || unitIndex === 0 ? value.toFixed(1) : value.toFixed(2);
-
-  return `${rounded.replace(/\.0$/, '')} ${units[unitIndex]}`;
-}
-
-function formatRemainingTime(expiresAt) {
-  const remainingMs = Math.max(0, expiresAt - Date.now());
-  const totalSeconds = Math.ceil(remainingMs / 1000);
-  const minutes = Math.floor(totalSeconds / 60).toString().padStart(2, '0');
-  const seconds = (totalSeconds % 60).toString().padStart(2, '0');
-  return `${minutes}:${seconds}`;
-}
-
-function createRandomSyncMinutes() {
-  return Math.floor(Math.random() * (24 * 60 - 1)) + 1;
-}
-
-function formatSyncTime(minutesAgo, t, lang) {
-  if (minutesAgo < 60) {
-    return lang === 'zh' ? `${minutesAgo} ${t.syncMinutesAgo}` : `${minutesAgo} ${t.syncMinutesAgo}`;
-  }
-
-  const hoursAgo = Math.floor(minutesAgo / 60);
-  return lang === 'zh' ? `${hoursAgo} ${t.syncHoursAgo}` : `${hoursAgo}${t.syncHoursAgo}`;
-}
+// ---- icons ----------------------------------------------------------------
 
 function Icon({ name, size = 18, strokeWidth = 2.2 }) {
   const common = {
@@ -377,10 +363,25 @@ function Icon({ name, size = 18, strokeWidth = 2.2 }) {
           <path d="m12 5 7 7-7 7" />
         </svg>
       );
+    case 'spinner':
+      return (
+        <svg {...common}>
+          <path d="M12 2v4" />
+          <path d="M12 18v4" />
+          <path d="M4.93 4.93l2.83 2.83" />
+          <path d="M16.24 16.24l2.83 2.83" />
+          <path d="M2 12h4" />
+          <path d="M18 12h4" />
+          <path d="M4.93 19.07l2.83-2.83" />
+          <path d="M16.24 7.76l2.83-2.83" />
+        </svg>
+      );
     default:
       return null;
   }
 }
+
+// ---- components -----------------------------------------------------------
 
 function LanguageSwitch({ lang, onLanguageChange, t }) {
   return (
@@ -410,6 +411,7 @@ function LoginPage({ onUserLogin, onAdminLogin, t }) {
   const [mode, setMode] = useState('user');
   const [key, setKey] = useState('');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
   const secretClicksRef = useRef([]);
   const isAdminMode = mode === 'admin';
 
@@ -418,7 +420,6 @@ function LoginPage({ onUserLogin, onAdminLogin, t }) {
     secretClicksRef.current = [...secretClicksRef.current, now].filter(
       (time) => now - time < 1800,
     );
-
     if (secretClicksRef.current.length >= 5) {
       secretClicksRef.current = [];
       setMode('admin');
@@ -427,21 +428,26 @@ function LoginPage({ onUserLogin, onAdminLogin, t }) {
     }
   };
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault();
-
     if (!isNonEmptyKey(key)) {
       setError(t.emptyKeyError);
       return;
     }
-
     setError('');
-    if (isAdminMode) {
-      onAdminLogin(key);
-      return;
-    }
+    setLoading(true);
 
-    onUserLogin(key);
+    try {
+      if (isAdminMode) {
+        await onAdminLogin(key);
+      } else {
+        await onUserLogin(key);
+      }
+    } catch (err) {
+      setError(err.message || t.loginError);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -473,12 +479,19 @@ function LoginPage({ onUserLogin, onAdminLogin, t }) {
             placeholder={isAdminMode ? t.adminKeyPlaceholder : t.accessKeyPlaceholder}
             aria-label={isAdminMode ? t.adminKeyAria : t.accessKeyAria}
             autoComplete={isAdminMode ? 'current-password' : 'off'}
+            disabled={loading}
           />
 
           {error && <p className="form-error" role="alert">{error}</p>}
 
-          <button className="primary-button" type="submit">
-            {isAdminMode ? t.unlockAdmin : t.accessFiles} <Icon name="arrow-right" size={17} />
+          <button className="primary-button" type="submit" disabled={loading}>
+            {loading ? (
+              <Icon name="spinner" size={17} />
+            ) : (
+              <>
+                {isAdminMode ? t.unlockAdmin : t.accessFiles} <Icon name="arrow-right" size={17} />
+              </>
+            )}
           </button>
         </form>
       </section>
@@ -489,26 +502,31 @@ function LoginPage({ onUserLogin, onAdminLogin, t }) {
 function AdminGateModal({ t, onCancel, onAdminLogin }) {
   const [key, setKey] = useState('');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     const handleEscape = (event) => {
       if (event.key === 'Escape') onCancel();
     };
-
     window.addEventListener('keydown', handleEscape);
     return () => window.removeEventListener('keydown', handleEscape);
   }, [onCancel]);
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault();
-
     if (!isNonEmptyKey(key)) {
       setError(t.emptyKeyError);
       return;
     }
-
     setError('');
-    onAdminLogin(key);
+    setLoading(true);
+    try {
+      await onAdminLogin(key);
+    } catch (err) {
+      setError(err.message || t.loginError);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -536,13 +554,18 @@ function AdminGateModal({ t, onCancel, onAdminLogin }) {
             aria-label={t.adminKeyAria}
             autoComplete="current-password"
             autoFocus
+            disabled={loading}
           />
 
           {error && <p className="form-error" role="alert">{error}</p>}
 
           <div className="admin-gate-actions">
-            <button className="secondary-button" type="button" onClick={onCancel}>{t.cancel}</button>
-            <button className="primary-button" type="submit">{t.verifyAdmin}</button>
+            <button className="secondary-button" type="button" onClick={onCancel} disabled={loading}>
+              {t.cancel}
+            </button>
+            <button className="primary-button" type="submit" disabled={loading}>
+              {loading ? <Icon name="spinner" size={15} /> : t.verifyAdmin}
+            </button>
           </div>
         </form>
       </section>
@@ -551,29 +574,67 @@ function AdminGateModal({ t, onCancel, onAdminLogin }) {
 }
 
 function ResourceCard({ item, t }) {
-  const handleDownload = (event) => {
+  const [downloading, setDownloading] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleDownload = async (event) => {
     event.preventDefault();
-    // Front-end placeholder: connect this button to your backend download endpoint.
-    // The backend should verify the 30-minute access session before returning the file.
+    setError('');
+    setDownloading(true);
+
+    try {
+      const res = await downloadFile(item.id);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      // Use the original filename from Content-Disposition if available,
+      // otherwise fall back to title + .pdf
+      const disposition = res.headers.get('content-disposition') || '';
+      const match = disposition.match(/filename\*=UTF-8''(.+)/);
+      a.download = match ? decodeURIComponent(match[1]) : `${item.title}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setDownloading(false);
+    }
   };
 
   return (
     <article className="resource-card">
       <div className="resource-card__top">
-        <div className="resource-icon"><Icon name={item.icon} size={25} strokeWidth={2.2} /></div>
-        <span className="download-count-badge">{item.downloads} {t.downloadsBadge}</span>
+        <div className="resource-icon"><Icon name="file" size={25} strokeWidth={2.2} /></div>
+        {item.download_count > 0 && (
+          <span className="download-count-badge">{item.download_count} {t.downloadsBadge}</span>
+        )}
       </div>
 
       <h2>{item.title}</h2>
 
       <div className="resource-meta resource-meta--single">
-        <span>{item.size}</span>
+        <span>{formatFileSize(item.size)}</span>
       </div>
 
       <p className="resource-download-note">{t.readyToDownload}</p>
 
-      <button className="outline-button resource-download-button" type="button" onClick={handleDownload}>
-        <Icon name="download" size={15} strokeWidth={2.4} /> {t.download}
+      {error && <p className="form-error" role="alert">{error}</p>}
+
+      <button
+        className="outline-button resource-download-button"
+        type="button"
+        onClick={handleDownload}
+        disabled={downloading}
+      >
+        {downloading ? (
+          <Icon name="spinner" size={15} strokeWidth={2.4} />
+        ) : (
+          <Icon name="download" size={15} strokeWidth={2.4} />
+        )}{' '}
+        {downloading ? t.downloading : t.download}
       </button>
     </article>
   );
@@ -581,33 +642,57 @@ function ResourceCard({ item, t }) {
 
 function ResourcesPage({ onLock, onAdminLogin, t, sessionExpiresAt, lastSyncMinutesAgo, lang }) {
   const [query, setQuery] = useState('');
+  const [files, setFiles] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [adminGateOpen, setAdminGateOpen] = useState(false);
   const secretTitleClicksRef = useRef([]);
 
+  // Load files from API on mount
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      setLoading(true);
+      setError('');
+      try {
+        const data = await fetchFileList();
+        if (!cancelled) setFiles(Array.isArray(data) ? data : []);
+      } catch (err) {
+        if (!cancelled) {
+          setError(err.message || t.loadError);
+          // 401 means session expired — parent will redirect
+          if (err.status === 401) {
+            onLock();
+            return;
+          }
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    load();
+    return () => { cancelled = true; };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   const filtered = useMemo(() => {
     const keyword = query.trim().toLowerCase();
-    if (!keyword) return resources;
-    return resources.filter((resource) => resource.title.toLowerCase().includes(keyword));
-  }, [query]);
+    if (!keyword) return files;
+    return files.filter((f) => f.title.toLowerCase().includes(keyword));
+  }, [files, query]);
 
   const resourceTotals = useMemo(() => {
-    const totalBytes = resources.reduce(
-      (sum, resource) => sum + parseFileSizeToBytes(resource.size),
-      0,
-    );
-
+    const totalBytes = files.reduce((sum, f) => sum + (f.size || 0), 0);
     return {
-      fileCount: resources.length,
+      fileCount: files.length,
       totalSize: formatFileSize(totalBytes),
     };
-  }, []);
+  }, [files]);
 
   const revealAdminGate = () => {
     const now = Date.now();
     secretTitleClicksRef.current = [...secretTitleClicksRef.current, now].filter(
       (time) => now - time < 1800,
     );
-
     if (secretTitleClicksRef.current.length >= 5) {
       secretTitleClicksRef.current = [];
       setAdminGateOpen(true);
@@ -615,8 +700,26 @@ function ResourcesPage({ onLock, onAdminLogin, t, sessionExpiresAt, lastSyncMinu
   };
 
   const handleDownloadAll = () => {
-    // Front-end placeholder: request a batch download from your backend.
-    // The backend should reject the request when the access session is expired.
+    files.forEach((f) => {
+      // Delay each download slightly to avoid browser blocking
+      setTimeout(() => {
+        downloadFile(f.id)
+          .then((res) => res.blob())
+          .then((blob) => {
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${f.title}.pdf`;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(url);
+          })
+          .catch(() => {
+            // Silently skip errors during batch download
+          });
+      }, 200);
+    });
   };
 
   return (
@@ -633,7 +736,7 @@ function ResourcesPage({ onLock, onAdminLogin, t, sessionExpiresAt, lastSyncMinu
 
         <div className="session-card">
           <span>{t.accessSessionActive}</span>
-          <strong>{t.keyValidFor}: {formatRemainingTime(sessionExpiresAt)}</strong>
+          <strong>{t.keyValidFor}: {formatRemainingTime(sessionExpiresAt - Date.now())}</strong>
           <small>{t.sessionNote}</small>
         </div>
 
@@ -647,7 +750,7 @@ function ResourcesPage({ onLock, onAdminLogin, t, sessionExpiresAt, lastSyncMinu
           />
         </label>
 
-        <button className="primary-button download-all" onClick={handleDownloadAll}>
+        <button className="primary-button download-all" onClick={handleDownloadAll} disabled={files.length === 0}>
           <Icon name="download" size={18} /> {t.downloadAll}
         </button>
 
@@ -663,7 +766,7 @@ function ResourcesPage({ onLock, onAdminLogin, t, sessionExpiresAt, lastSyncMinu
             </div>
             <div>
               <dt>{t.lastSync}</dt>
-              <dd>{formatSyncTime(lastSyncMinutesAgo, t, lang)}</dd>
+              <dd>{formatSyncTime(lastSyncMinutesAgo, lang)}</dd>
             </div>
           </dl>
         </div>
@@ -672,6 +775,11 @@ function ResourcesPage({ onLock, onAdminLogin, t, sessionExpiresAt, lastSyncMinu
       </aside>
 
       <section className="resources-grid" aria-label={t.resourcesGridAria}>
+        {loading && <p className="resources-empty">{t.downloading}</p>}
+        {error && <p className="form-error" role="alert">{error}</p>}
+        {!loading && !error && filtered.length === 0 && (
+          <p className="resources-empty">{t.noFiles}</p>
+        )}
         {filtered.map((item) => (
           <ResourceCard key={item.id} item={item} t={t} />
         ))}
@@ -691,13 +799,97 @@ function ResourcesPage({ onLock, onAdminLogin, t, sessionExpiresAt, lastSyncMinu
 function AdminPage({ onSignOut, t }) {
   const [title, setTitle] = useState('');
   const [search, setSearch] = useState('');
+  const [files, setFiles] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState('');
+  const [selectedFile, setSelectedFile] = useState(null);
   const fileInputRef = useRef(null);
+
+  const loadFiles = useCallback(async () => {
+    setError('');
+    try {
+      const data = await adminListFiles();
+      setFiles(Array.isArray(data) ? data : []);
+    } catch (err) {
+      if (err.status === 401) {
+        onSignOut();
+        return;
+      }
+      setError(err.message || t.loadError);
+    } finally {
+      setLoading(false);
+    }
+  }, [onSignOut, t]);
+
+  useEffect(() => {
+    loadFiles();
+  }, [loadFiles]);
+
+  const handleUpload = async (event) => {
+    event.preventDefault();
+    if (!selectedFile) {
+      setUploadError(t.emptyKeyError);
+      return;
+    }
+
+    setUploading(true);
+    setUploadError('');
+
+    try {
+      const formData = new FormData();
+      formData.append('file', selectedFile);
+      if (title.trim()) formData.append('title', title.trim());
+
+      await adminUploadFile(formData);
+      setTitle('');
+      setSelectedFile(null);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      await loadFiles();
+    } catch (err) {
+      if (err.status === 401) {
+        onSignOut();
+        return;
+      }
+      setUploadError(err.message || t.uploadError);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleDelete = async (file) => {
+    const msg = t.deleteConfirm.replace('{title}', file.title);
+    if (!window.confirm(msg)) return;
+
+    try {
+      await adminDeleteFile(file.id);
+      setFiles((prev) => prev.filter((f) => f.id !== file.id));
+    } catch (err) {
+      if (err.status === 401) {
+        onSignOut();
+        return;
+      }
+      alert(err.message || t.deleteError);
+    }
+  };
+
+  const handleFileChange = (event) => {
+    const f = event.target.files?.[0];
+    setSelectedFile(f || null);
+    setUploadError('');
+    // Auto-fill title from filename if empty
+    if (f && !title.trim()) {
+      const name = f.name.replace(/\.pdf$/i, '');
+      setTitle(name);
+    }
+  };
 
   const filteredFiles = useMemo(() => {
     const keyword = search.trim().toLowerCase();
-    if (!keyword) return adminFiles;
-    return adminFiles.filter((file) => file.title.toLowerCase().includes(keyword));
-  }, [search]);
+    if (!keyword) return files;
+    return files.filter((f) => f.title.toLowerCase().includes(keyword));
+  }, [files, search]);
 
   return (
     <main className="admin-page">
@@ -714,7 +906,9 @@ function AdminPage({ onSignOut, t }) {
         </div>
 
         <div className="admin-bottom">
-          <button className="secondary-button">{t.uploadNewPdf}</button>
+          <button className="secondary-button" onClick={() => fileInputRef.current?.click()}>
+            {t.uploadNewPdf}
+          </button>
           <button className="signout-button" onClick={onSignOut}>
             <Icon name="signout" size={17} /> {t.signOut}
           </button>
@@ -728,7 +922,7 @@ function AdminPage({ onSignOut, t }) {
             <p>{t.uploadDescription}</p>
           </header>
 
-          <form className="upload-card upload-card--compact" onSubmit={(event) => event.preventDefault()}>
+          <form className="upload-card upload-card--compact" onSubmit={handleUpload}>
             <label className="form-label" htmlFor="documentTitle">{t.documentTitle}</label>
             <input
               id="documentTitle"
@@ -745,12 +939,30 @@ function AdminPage({ onSignOut, t }) {
               onClick={() => fileInputRef.current?.click()}
             >
               <Icon name="upload" size={34} />
-              <span>{t.dropZoneText}<br />{t.dropZonePdf}</span>
+              {selectedFile ? (
+                <span>{selectedFile.name}</span>
+              ) : (
+                <span>{t.dropZoneText}<br />{t.dropZonePdf}</span>
+              )}
               <small>{t.maxSize}</small>
-              <input ref={fileInputRef} type="file" accept="application/pdf" hidden />
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="application/pdf"
+                hidden
+                onChange={handleFileChange}
+              />
             </button>
 
-            <button className="primary-button process-button" type="submit">{t.processUpload}</button>
+            {uploadError && <p className="form-error" role="alert">{uploadError}</p>}
+
+            <button
+              className="primary-button process-button"
+              type="submit"
+              disabled={uploading || !selectedFile}
+            >
+              {uploading ? <Icon name="spinner" size={17} /> : t.processUpload}
+            </button>
           </form>
         </div>
 
@@ -772,32 +984,43 @@ function AdminPage({ onSignOut, t }) {
           </div>
 
           <div className="table-card" role="region" aria-label={t.managementTableAria}>
-            <table>
-              <thead>
-                <tr>
-                  <th>{t.tableTitle}</th>
-                  <th>{t.tableDownloads}</th>
-                  <th>{t.tableActions}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredFiles.map((file) => (
-                  <tr key={file.id}>
-                    <td>
-                      <span className="admin-file-title">
-                        <Icon name="file" size={18} /> {file.title}
-                      </span>
-                    </td>
-                    <td>{file.downloads}</td>
-                    <td>
-                      <button className="icon-button" aria-label={`${t.deleteFile} ${file.title}`}>
-                        <Icon name="trash" size={19} />
-                      </button>
-                    </td>
+            {error && <p className="form-error" style={{ padding: 16 }} role="alert">{error}</p>}
+            {loading && <p style={{ padding: 16 }}>{t.downloading}</p>}
+            {!loading && !error && files.length === 0 && (
+              <p style={{ padding: 16 }}>{t.noFilesAdmin}</p>
+            )}
+            {files.length > 0 && (
+              <table>
+                <thead>
+                  <tr>
+                    <th>{t.tableTitle}</th>
+                    <th>{t.tableDownloads}</th>
+                    <th>{t.tableActions}</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {filteredFiles.map((file) => (
+                    <tr key={file.id}>
+                      <td>
+                        <span className="admin-file-title">
+                          <Icon name="file" size={18} /> {file.title}
+                        </span>
+                      </td>
+                      <td>{file.download_count ?? 0}</td>
+                      <td>
+                        <button
+                          className="icon-button"
+                          aria-label={`${t.deleteFile} ${file.title}`}
+                          onClick={() => handleDelete(file)}
+                        >
+                          <Icon name="trash" size={19} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </div>
         </div>
       </section>
@@ -805,15 +1028,20 @@ function AdminPage({ onSignOut, t }) {
   );
 }
 
+// ---- root app -------------------------------------------------------------
+
 export default function App() {
   const [lang, setLang] = useState(() => localStorage.getItem('secure-doc-language') || 'en');
   const [tick, setTick] = useState(Date.now());
   const [lastSyncMinutesAgo] = useState(createRandomSyncMinutes);
-  const [accessExpiresAt, setAccessExpiresAt] = useState(() => readTimedSession(USER_SESSION_STORAGE_KEY));
-  const [adminExpiresAt, setAdminExpiresAt] = useState(() => readTimedSession(ADMIN_SESSION_STORAGE_KEY));
+  const [accessExpiresAt, setAccessExpiresAt] = useState(() => {
+    if (readAdminSession()) return 0;
+    return readUserSession();
+  });
+  const [adminExpiresAt, setAdminExpiresAt] = useState(() => readAdminSession());
   const [page, setPage] = useState(() => {
-    if (readTimedSession(ADMIN_SESSION_STORAGE_KEY)) return 'admin';
-    if (readTimedSession(USER_SESSION_STORAGE_KEY)) return 'resources';
+    if (readAdminSession()) return 'admin';
+    if (readUserSession()) return 'resources';
     return 'login';
   });
 
@@ -821,56 +1049,66 @@ export default function App() {
   const isAccessValid = accessExpiresAt > tick;
   const isAdminValid = adminExpiresAt > tick;
 
+  // Persist language
   useEffect(() => {
     document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'en';
     localStorage.setItem('secure-doc-language', lang);
   }, [lang]);
 
+  // Tick for countdown timers
   useEffect(() => {
     const timer = window.setInterval(() => {
       setTick(Date.now());
-      setAccessExpiresAt(readTimedSession(USER_SESSION_STORAGE_KEY));
-      setAdminExpiresAt(readTimedSession(ADMIN_SESSION_STORAGE_KEY));
+      setAccessExpiresAt(readUserSession());
+      setAdminExpiresAt(readAdminSession());
     }, 1000);
-
     return () => window.clearInterval(timer);
   }, []);
 
+  // Redirect when session expires
   useEffect(() => {
     if (page === 'resources' && !isAccessValid) {
       setPage('login');
     }
-
     if (page === 'admin' && !isAdminValid) {
       setPage('login');
     }
   }, [isAccessValid, isAdminValid, page]);
 
-  const handleUserLogin = () => {
-    const expiresAt = createTimedSession(USER_SESSION_STORAGE_KEY);
+  // ---- user login ---------------------------------------------------------
+
+  const handleUserLogin = async (key) => {
+    const data = await verifyAccessKey(key);
+    const expiresAt = persistUserSession(data.expires_at);
     setAccessExpiresAt(expiresAt);
     setPage('resources');
   };
 
-  const handleAdminLogin = (adminKey = '') => {
-    if (!isNonEmptyKey(adminKey)) return;
+  // ---- admin login --------------------------------------------------------
 
-    const expiresAt = createTimedSession(ADMIN_SESSION_STORAGE_KEY);
+  const handleAdminLogin = async (adminKey) => {
+    if (!isNonEmptyKey(adminKey)) return;
+    await adminLogin(adminKey);
+    const expiresAt = persistAdminSession();
     setAdminExpiresAt(expiresAt);
     setPage('admin');
   };
 
+  // ---- lock / sign out ----------------------------------------------------
+
   const handleLockUserSession = () => {
-    clearTimedSession(USER_SESSION_STORAGE_KEY);
+    clearUserSession();
     setAccessExpiresAt(0);
     setPage('login');
   };
 
   const handleAdminSignOut = () => {
-    clearTimedSession(ADMIN_SESSION_STORAGE_KEY);
+    clearAdminSession();
     setAdminExpiresAt(0);
     setPage('login');
   };
+
+  // ---- render -------------------------------------------------------------
 
   return (
     <>
@@ -886,7 +1124,9 @@ export default function App() {
           lang={lang}
         />
       )}
-      {page === 'login' && <LoginPage onUserLogin={handleUserLogin} onAdminLogin={handleAdminLogin} t={t} />}
+      {page === 'login' && (
+        <LoginPage onUserLogin={handleUserLogin} onAdminLogin={handleAdminLogin} t={t} />
+      )}
     </>
   );
 }
