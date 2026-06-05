@@ -22,6 +22,12 @@ prod_commands() {
         echo "Installing serve package..."
         npm install -g serve
     fi
+
+    # Set backend API URL for production build.
+    # Defaults to the production backend; override via Sealos env var if needed.
+    export REACT_APP_API_BASE="${REACT_APP_API_BASE:-https://cjdfnwwofgct.sealosgzg.site}"
+    echo "Building with REACT_APP_API_BASE=$REACT_APP_API_BASE"
+
     npm run build
     echo "Starting production server..."
     npx serve -s build
