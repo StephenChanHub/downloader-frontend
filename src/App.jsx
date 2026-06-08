@@ -897,8 +897,14 @@ function ResourcesPage({ onLock, onAdminLogin, t, sessionExpiresAt, lastSyncMinu
       try {
         const data = await fetchFileList({ page, limit: PAGE_SIZE, search });
         if (!cancelled) {
-          setFiles(data.files || []);
-          setTotal(data.total || 0);
+          // Backend may return a plain array (no pagination) or { total, files }
+          if (Array.isArray(data)) {
+            setFiles(data);
+            setTotal(data.length);
+          } else {
+            setFiles(data.files || []);
+            setTotal(data.total || 0);
+          }
         }
       } catch (err) {
         if (!cancelled) {
