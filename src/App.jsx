@@ -937,7 +937,7 @@ function ResourceCard({ item, t, onPreview }) {
       </div>
     </article>
   );
-});
+}
 
 function ResourcesPage({ onLock, onAdminLogin, t, sessionExpiresAt, lastSyncMinutesAgo, lang }) {
   const PAGE_SIZE = 20;
@@ -1553,7 +1553,7 @@ const AdminPage = memo(function AdminPage({ onSignOut, t }) {
       )}
     </main>
   );
-}
+});
 
 // ---- root app -------------------------------------------------------------
 
