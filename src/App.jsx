@@ -667,6 +667,52 @@ function AdminGateModal({ t, onCancel, onAdminLogin }) {
 }
 
 function PreviewModal({ file, t, onClose }) {
+  const [pdfUrl, setPdfUrl] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    let objectUrl = null;
+
+    async function loadPdf() {
+      setLoading(true);
+      setLoadError('');
+      try {
+        // 1. Fetch the PDF through our authenticated wrapper (carries Cookie)
+        const res = await downloadFile(file.id);
+
+        // 2. Convert response body to an in-memory Blob
+        const blob = await res.blob();
+
+        if (cancelled) return;
+
+        // 3. Create a local blob: URL that the iframe can render natively
+        objectUrl = URL.createObjectURL(blob);
+        setPdfUrl(objectUrl);
+      } catch (err) {
+        if (!cancelled) {
+          setLoadError(err.message || 'Failed to load PDF');
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    if (file?.id) {
+      loadPdf();
+    }
+
+    // 4. Clean up: revoke the blob URL to prevent memory leaks
+    return () => {
+      cancelled = true;
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+      }
+    };
+  }, [file?.id]);
+
+  // ESC key & body scroll lock
   useEffect(() => {
     const handleEscape = (event) => {
       if (event.key === 'Escape') onClose();
@@ -699,11 +745,24 @@ function PreviewModal({ file, t, onClose }) {
           </button>
         </div>
         <div className="preview-body">
-          <iframe
-            src={`/api/files/${file.id}/download`}
-            title={file.title}
-            sandbox="allow-scripts allow-same-origin"
-          />
+          {loading && (
+            <div className="preview-loading">
+              <Icon name="spinner" size={28} />
+              <span>{t.downloading}</span>
+            </div>
+          )}
+          {loadError && (
+            <div className="preview-loading">
+              <p className="form-error" role="alert">{loadError}</p>
+            </div>
+          )}
+          {pdfUrl && !loading && (
+            <iframe
+              src={pdfUrl}
+              title={file.title}
+              sandbox="allow-scripts allow-same-origin"
+            />
+          )}
         </div>
       </div>
     </div>
