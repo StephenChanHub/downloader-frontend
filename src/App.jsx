@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { adminLogin, adminListFiles, adminUploadFile, adminDeleteFile, adminGetStats } from './api/admin';
 import { verifyAccessKey } from './api/auth';
 import { fetchFileList, downloadFile } from './api/files';
@@ -937,7 +937,7 @@ function ResourceCard({ item, t, onPreview }) {
       </div>
     </article>
   );
-}
+});
 
 function ResourcesPage({ onLock, onAdminLogin, t, sessionExpiresAt, lastSyncMinutesAgo, lang }) {
   const PAGE_SIZE = 20;
@@ -1135,7 +1135,7 @@ function ResourcesPage({ onLock, onAdminLogin, t, sessionExpiresAt, lastSyncMinu
   );
 }
 
-function AdminPage({ onSignOut, t }) {
+const AdminPage = memo(function AdminPage({ onSignOut, t }) {
   const [adminView, setAdminView] = useState('dashboard');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -1572,7 +1572,7 @@ export default function App() {
     return 'login';
   });
 
-  const t = copy[lang];
+  const t = useMemo(() => copy[lang], [lang]);
   const isAccessValid = accessExpiresAt > tick;
   const isAdminValid = adminExpiresAt > tick;
 
