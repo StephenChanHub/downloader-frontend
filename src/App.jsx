@@ -469,6 +469,25 @@ function Icon({ name, size = 18, strokeWidth = 2.2 }) {
           <rect x="13" y="13" width="8" height="8" rx="1" />
         </svg>
       );
+    case 'folder':
+      return (
+        <svg {...common}>
+          <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+        </svg>
+      );
+    case 'folder-open':
+      return (
+        <svg {...common}>
+          <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+          <path d="M2 11h20" />
+        </svg>
+      );
+    case 'chevron-down':
+      return (
+        <svg {...common}>
+          <path d="m6 9 6 6 6-6" />
+        </svg>
+      );
     default:
       return null;
   }
@@ -1130,7 +1149,14 @@ function AdminPage({ onSignOut, t }) {
   const [selectedFile, setSelectedFile] = useState(null);
   const [stats, setStats] = useState(null);
   const [statsLoading, setStatsLoading] = useState(true);
+  const [collapsedFolders, setCollapsedFolders] = useState(new Set());
   const fileInputRef = useRef(null);
+
+  // Use refs for callback props so loadFiles stays stable across renders
+  const onSignOutRef = useRef(onSignOut);
+  onSignOutRef.current = onSignOut;
+  const tRef = useRef(t);
+  tRef.current = t;
 
   const loadFiles = useCallback(async () => {
     setError('');
@@ -1139,14 +1165,14 @@ function AdminPage({ onSignOut, t }) {
       setFiles(Array.isArray(data) ? data : []);
     } catch (err) {
       if (err.status === 401) {
-        onSignOut();
+        onSignOutRef.current();
         return;
       }
-      setError(err.message || t.loadError);
+      setError(err.message || tRef.current.loadError);
     } finally {
       setLoading(false);
     }
-  }, [onSignOut, t]);
+  }, []); // Stable — no more re-fetch on every App tick
 
   useEffect(() => {
     loadFiles();
@@ -1236,6 +1262,31 @@ function AdminPage({ onSignOut, t }) {
     if (!keyword) return files;
     return files.filter((f) => f.title.toLowerCase().includes(keyword));
   }, [files, search]);
+
+  // Group files by folder_name, sorted alphabetically
+  const folderGroups = useMemo(() => {
+    const groups = {};
+    filteredFiles.forEach((f) => {
+      const key = f.folder_name || 'default';
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(f);
+    });
+    return Object.keys(groups)
+      .sort()
+      .map((name) => ({ name, files: groups[name] }));
+  }, [filteredFiles]);
+
+  const toggleFolder = (folderName) => {
+    setCollapsedFolders((prev) => {
+      const next = new Set(prev);
+      if (next.has(folderName)) {
+        next.delete(folderName);
+      } else {
+        next.add(folderName);
+      }
+      return next;
+    });
+  };
 
   return (
     <main className="admin-page">
@@ -1440,49 +1491,63 @@ function AdminPage({ onSignOut, t }) {
               </label>
             </div>
 
-            <div className="table-card" role="region" aria-label={t.managementTableAria}>
-              {error && <p className="form-error" style={{ padding: 16 }} role="alert">{error}</p>}
-              {loading && <p style={{ padding: 16 }}>{t.downloading}</p>}
-              {!loading && !error && files.length === 0 && (
-                <p style={{ padding: 16 }}>{t.noFilesAdmin}</p>
-              )}
-              {files.length > 0 && (
-                <table>
-                  <thead>
-                    <tr>
-                      <th>{t.tableTitle}</th>
-                      <th>{t.tableFolder}</th>
-                      <th>{t.tableDownloads}</th>
-                      <th>{t.tableActions}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredFiles.map((file) => (
-                      <tr key={file.id}>
-                        <td>
-                          <span className="admin-file-title">
-                            <Icon name="file" size={18} /> {file.title}
-                          </span>
-                        </td>
-                        <td>
-                          <span className="folder-tag">{file.folder_name || 'default'}</span>
-                        </td>
-                        <td>{file.download_count ?? 0}</td>
-                        <td>
-                          <button
-                            className="icon-button"
-                            aria-label={`${t.deleteFile} ${file.title}`}
-                            onClick={() => handleDelete(file)}
-                          >
-                            <Icon name="trash" size={19} />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
+            {error && <p className="form-error" style={{ padding: 16 }} role="alert">{error}</p>}
+            {loading && <p style={{ padding: 16 }}>{t.downloading}</p>}
+            {!loading && !error && files.length === 0 && (
+              <p style={{ padding: 16 }}>{t.noFilesAdmin}</p>
+            )}
+            {files.length > 0 && folderGroups.map((group) => {
+              const isCollapsed = collapsedFolders.has(group.name);
+              return (
+                <div className="folder-group" key={group.name}>
+                  <button
+                    type="button"
+                    className="folder-group__header"
+                    onClick={() => toggleFolder(group.name)}
+                    aria-expanded={!isCollapsed}
+                  >
+                    <Icon name={isCollapsed ? 'chevron-right' : 'chevron-down'} size={16} strokeWidth={2.5} />
+                    <Icon name={isCollapsed ? 'folder' : 'folder-open'} size={18} strokeWidth={2.2} />
+                    <span className="folder-group__name">{group.name}</span>
+                    <span className="folder-group__count">({group.files.length})</span>
+                  </button>
+                  {!isCollapsed && (
+                    <div className="table-card folder-group__table">
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>{t.tableTitle}</th>
+                            <th>{t.tableDownloads}</th>
+                            <th>{t.tableActions}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {group.files.map((file) => (
+                            <tr key={file.id}>
+                              <td>
+                                <span className="admin-file-title">
+                                  <Icon name="file" size={18} /> {file.title}
+                                </span>
+                              </td>
+                              <td>{file.download_count ?? 0}</td>
+                              <td>
+                                <button
+                                  className="icon-button"
+                                  aria-label={`${t.deleteFile} ${file.title}`}
+                                  onClick={() => handleDelete(file)}
+                                >
+                                  <Icon name="trash" size={19} />
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </section>
       )}
@@ -1539,36 +1604,36 @@ export default function App() {
 
   // ---- user login ---------------------------------------------------------
 
-  const handleUserLogin = async (key) => {
+  const handleUserLogin = useCallback(async (key) => {
     const data = await verifyAccessKey(key);
     const expiresAt = persistUserSession(data.expires_at);
     setAccessExpiresAt(expiresAt);
     setPage('resources');
-  };
+  }, []);
 
   // ---- admin login --------------------------------------------------------
 
-  const handleAdminLogin = async (adminKey) => {
+  const handleAdminLogin = useCallback(async (adminKey) => {
     if (!isNonEmptyKey(adminKey)) return;
     await adminLogin(adminKey);
     const expiresAt = persistAdminSession();
     setAdminExpiresAt(expiresAt);
     setPage('admin');
-  };
+  }, []);
 
   // ---- lock / sign out ----------------------------------------------------
 
-  const handleLockUserSession = () => {
+  const handleLockUserSession = useCallback(() => {
     clearUserSession();
     setAccessExpiresAt(0);
     setPage('login');
-  };
+  }, []);
 
-  const handleAdminSignOut = () => {
+  const handleAdminSignOut = useCallback(() => {
     clearAdminSession();
     setAdminExpiresAt(0);
     setPage('login');
-  };
+  }, []);
 
   // ---- render -------------------------------------------------------------
 
