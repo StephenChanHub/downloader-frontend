@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { adminLogin, adminListFiles, adminUploadFile, adminDeleteFile } from './api/admin';
+import { adminLogin, adminListFiles, adminUploadFile, adminDeleteFile, adminGetStats } from './api/admin';
 import { verifyAccessKey } from './api/auth';
 import { fetchFileList, downloadFile } from './api/files';
 import { formatFileSize, formatRemainingTime } from './utils/format';
@@ -138,6 +138,9 @@ const copy = {
     uploadDescription: 'Uploaded documents are protected by the site-level access key session.',
     documentTitle: 'DOCUMENT TITLE',
     documentTitlePlaceholder: 'e.g., Annual Report',
+    folderName: 'FOLDER NAME',
+    folderNamePlaceholder: 'e.g., math_course, english_docs',
+    folderNameHint: 'Files are physically stored together; folder name is a logical tag for access control.',
     filePayload: 'FILE PAYLOAD',
     dropZoneText: 'Click to browse or drag',
     dropZonePdf: 'PDF here',
@@ -149,6 +152,7 @@ const copy = {
     searchResourcesAria: 'Search resources',
     managementTableAria: 'Resource management table',
     tableTitle: 'TITLE',
+    tableFolder: 'FOLDER',
     tableDownloads: 'DOWNLOADS',
     tableActions: 'ACTIONS',
     deleteFile: 'Delete',
@@ -164,6 +168,19 @@ const copy = {
     noFilesAdmin: 'No files in the vault yet. Upload your first PDF above.',
     downloading: 'Downloading...',
     uploading: 'Uploading...',
+    preview: 'PREVIEW',
+    closePreview: 'Close preview',
+    prevPage: 'Previous page',
+    nextPage: 'Next page',
+    pageInfo: '{start}–{end} of {total}',
+    dashboard: 'Dashboard',
+    totalStorage: 'Total Storage',
+    todayVisitors: "Today's Visitors",
+    todayDownloads: 'Today\'s Downloads',
+    topDownloads: 'Top Downloads',
+    rank: 'RANK',
+    dashboardDesc: 'System overview and key metrics at a glance.',
+    noStats: 'Unable to load statistics.',
   },
   zh: {
     languageLabel: '语言',
@@ -216,6 +233,9 @@ const copy = {
     uploadDescription: '上传文档将由网站级访问密钥会话统一保护。',
     documentTitle: '文档标题',
     documentTitlePlaceholder: '例如：年度报告',
+    folderName: '所属文件夹',
+    folderNamePlaceholder: '例如：math_course、english_docs',
+    folderNameHint: '文件物理存储在一起；文件夹名仅作为访问控制的逻辑标签。',
     filePayload: '文件载荷',
     dropZoneText: '点击浏览或拖拽',
     dropZonePdf: 'PDF 到此处',
@@ -227,6 +247,7 @@ const copy = {
     searchResourcesAria: '搜索资源',
     managementTableAria: '资源管理表格',
     tableTitle: '标题',
+    tableFolder: '文件夹',
     tableDownloads: '下载次数',
     tableActions: '操作',
     deleteFile: '删除',
@@ -242,6 +263,19 @@ const copy = {
     noFilesAdmin: '保险库中暂无文件，请上传您的第一个 PDF。',
     downloading: '下载中...',
     uploading: '上传中...',
+    preview: '预览',
+    closePreview: '关闭预览',
+    prevPage: '上一页',
+    nextPage: '下一页',
+    pageInfo: '第 {start}–{end} 条，共 {total} 条',
+    dashboard: '仪表盘',
+    totalStorage: '总存储空间',
+    todayVisitors: '今日访客',
+    todayDownloads: '今日下载',
+    topDownloads: '热门下载',
+    rank: '排名',
+    dashboardDesc: '系统概览与关键指标一览。',
+    noStats: '无法加载统计数据。',
   },
 };
 
@@ -374,6 +408,65 @@ function Icon({ name, size = 18, strokeWidth = 2.2 }) {
           <path d="M18 12h4" />
           <path d="M4.93 19.07l2.83-2.83" />
           <path d="M16.24 7.76l2.83-2.83" />
+        </svg>
+      );
+    case 'eye':
+      return (
+        <svg {...common}>
+          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+          <circle cx="12" cy="12" r="3" />
+        </svg>
+      );
+    case 'chevron-left':
+      return (
+        <svg {...common}>
+          <path d="m15 18-6-6 6-6" />
+        </svg>
+      );
+    case 'chevron-right':
+      return (
+        <svg {...common}>
+          <path d="m9 18 6-6-6-6" />
+        </svg>
+      );
+    case 'database':
+      return (
+        <svg {...common}>
+          <ellipse cx="12" cy="5" rx="9" ry="3" />
+          <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" />
+          <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
+        </svg>
+      );
+    case 'users':
+      return (
+        <svg {...common}>
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+          <circle cx="9" cy="7" r="4" />
+          <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+          <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+        </svg>
+      );
+    case 'trending-up':
+      return (
+        <svg {...common}>
+          <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" />
+          <polyline points="17 6 23 6 23 12" />
+        </svg>
+      );
+    case 'award':
+      return (
+        <svg {...common}>
+          <circle cx="12" cy="8" r="6" />
+          <path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11" />
+        </svg>
+      );
+    case 'layout-dashboard':
+      return (
+        <svg {...common}>
+          <rect x="3" y="3" width="8" height="8" rx="1" />
+          <rect x="13" y="3" width="8" height="8" rx="1" />
+          <rect x="3" y="13" width="8" height="8" rx="1" />
+          <rect x="13" y="13" width="8" height="8" rx="1" />
         </svg>
       );
     default:
@@ -573,7 +666,126 @@ function AdminGateModal({ t, onCancel, onAdminLogin }) {
   );
 }
 
-function ResourceCard({ item, t }) {
+function PreviewModal({ file, t, onClose }) {
+  useEffect(() => {
+    const handleEscape = (event) => {
+      if (event.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleEscape);
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('keydown', handleEscape);
+      document.body.style.overflow = '';
+    };
+  }, [onClose]);
+
+  return (
+    <div className="preview-overlay" role="presentation" onMouseDown={onClose}>
+      <div
+        className="preview-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label={file.title}
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <div className="preview-header">
+          <h2>{file.title}</h2>
+          <button
+            className="icon-button preview-close"
+            onClick={onClose}
+            aria-label={t.closePreview}
+          >
+            ✕
+          </button>
+        </div>
+        <div className="preview-body">
+          <iframe
+            src={`/api/files/${file.id}/download`}
+            title={file.title}
+            sandbox="allow-scripts allow-same-origin"
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Pagination({ page, totalPages, total, pageSize, onPageChange, t }) {
+  if (totalPages <= 1) return null;
+
+  const start = (page - 1) * pageSize + 1;
+  const end = Math.min(page * pageSize, total);
+
+  // Build visible page numbers
+  const pages = [];
+  const maxVisible = 5;
+  let startPage = Math.max(1, page - Math.floor(maxVisible / 2));
+  let endPage = Math.min(totalPages, startPage + maxVisible - 1);
+  if (endPage - startPage + 1 < maxVisible) {
+    startPage = Math.max(1, endPage - maxVisible + 1);
+  }
+
+  for (let i = startPage; i <= endPage; i++) {
+    pages.push(i);
+  }
+
+  const info = t.pageInfo
+    .replace('{start}', start)
+    .replace('{end}', end)
+    .replace('{total}', total);
+
+  return (
+    <div className="pagination">
+      <span className="pagination-info">{info}</span>
+      <div className="pagination-controls">
+        <button
+          className="pagination-arrow"
+          disabled={page <= 1}
+          onClick={() => onPageChange(page - 1)}
+          aria-label={t.prevPage}
+        >
+          <Icon name="chevron-left" size={16} />
+        </button>
+
+        {startPage > 1 && (
+          <>
+            <button className="pagination-num" onClick={() => onPageChange(1)}>1</button>
+            {startPage > 2 && <span className="pagination-ellipsis">…</span>}
+          </>
+        )}
+
+        {pages.map((p) => (
+          <button
+            key={p}
+            className={`pagination-num ${p === page ? 'is-active' : ''}`}
+            onClick={() => onPageChange(p)}
+            aria-current={p === page ? 'page' : undefined}
+          >
+            {p}
+          </button>
+        ))}
+
+        {endPage < totalPages && (
+          <>
+            {endPage < totalPages - 1 && <span className="pagination-ellipsis">…</span>}
+            <button className="pagination-num" onClick={() => onPageChange(totalPages)}>{totalPages}</button>
+          </>
+        )}
+
+        <button
+          className="pagination-arrow"
+          disabled={page >= totalPages}
+          onClick={() => onPageChange(page + 1)}
+          aria-label={t.nextPage}
+        >
+          <Icon name="chevron-right" size={16} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ResourceCard({ item, t, onPreview }) {
   const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState('');
 
@@ -623,44 +835,74 @@ function ResourceCard({ item, t }) {
 
       {error && <p className="form-error" role="alert">{error}</p>}
 
-      <button
-        className="outline-button resource-download-button"
-        type="button"
-        onClick={handleDownload}
-        disabled={downloading}
-      >
-        {downloading ? (
-          <Icon name="spinner" size={15} strokeWidth={2.4} />
-        ) : (
-          <Icon name="download" size={15} strokeWidth={2.4} />
-        )}{' '}
-        {downloading ? t.downloading : t.download}
-      </button>
+      <div className="resource-card-actions">
+        <button
+          className="outline-button resource-preview-button"
+          type="button"
+          onClick={() => onPreview(item)}
+        >
+          <Icon name="eye" size={15} strokeWidth={2.4} /> {t.preview}
+        </button>
+        <button
+          className="outline-button resource-download-button"
+          type="button"
+          onClick={handleDownload}
+          disabled={downloading}
+        >
+          {downloading ? (
+            <Icon name="spinner" size={15} strokeWidth={2.4} />
+          ) : (
+            <Icon name="download" size={15} strokeWidth={2.4} />
+          )}{' '}
+          {downloading ? t.downloading : t.download}
+        </button>
+      </div>
     </article>
   );
 }
 
 function ResourcesPage({ onLock, onAdminLogin, t, sessionExpiresAt, lastSyncMinutesAgo, lang }) {
-  const [query, setQuery] = useState('');
+  const PAGE_SIZE = 20;
+
+  const [searchInput, setSearchInput] = useState('');
+  const [search, setSearch] = useState('');
   const [files, setFiles] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [adminGateOpen, setAdminGateOpen] = useState(false);
+  const [previewFile, setPreviewFile] = useState(null);
+  const debounceRef = useRef(null);
   const secretTitleClicksRef = useRef([]);
 
-  // Load files from API on mount
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  // Debounced server-side search
+  const handleSearchChange = (value) => {
+    setSearchInput(value);
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      setSearch(value);
+      setPage(1);
+    }, 350);
+  };
+
+  // Load files from API with pagination & search
   useEffect(() => {
     let cancelled = false;
     async function load() {
       setLoading(true);
       setError('');
       try {
-        const data = await fetchFileList();
-        if (!cancelled) setFiles(Array.isArray(data) ? data : []);
+        const data = await fetchFileList({ page, limit: PAGE_SIZE, search });
+        if (!cancelled) {
+          setFiles(data.files || []);
+          setTotal(data.total || 0);
+        }
       } catch (err) {
         if (!cancelled) {
           setError(err.message || t.loadError);
-          // 401 means session expired — parent will redirect
           if (err.status === 401) {
             onLock();
             return;
@@ -672,21 +914,16 @@ function ResourcesPage({ onLock, onAdminLogin, t, sessionExpiresAt, lastSyncMinu
     }
     load();
     return () => { cancelled = true; };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const filtered = useMemo(() => {
-    const keyword = query.trim().toLowerCase();
-    if (!keyword) return files;
-    return files.filter((f) => f.title.toLowerCase().includes(keyword));
-  }, [files, query]);
+  }, [page, search]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const resourceTotals = useMemo(() => {
     const totalBytes = files.reduce((sum, f) => sum + (f.size || 0), 0);
     return {
-      fileCount: files.length,
-      totalSize: formatFileSize(totalBytes),
+      fileCount: total,
+      totalSize: '—',
+      pageBytes: formatFileSize(totalBytes),
     };
-  }, [files]);
+  }, [files, total]);
 
   const revealAdminGate = () => {
     const now = Date.now();
@@ -701,7 +938,6 @@ function ResourcesPage({ onLock, onAdminLogin, t, sessionExpiresAt, lastSyncMinu
 
   const handleDownloadAll = () => {
     files.forEach((f) => {
-      // Delay each download slightly to avoid browser blocking
       setTimeout(() => {
         downloadFile(f.id)
           .then((res) => res.blob())
@@ -741,10 +977,10 @@ function ResourcesPage({ onLock, onAdminLogin, t, sessionExpiresAt, lastSyncMinu
         </div>
 
         <label className="filter-box">
-          <Icon name="filter" size={18} />
+          <Icon name="search" size={18} />
           <input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
+            value={searchInput}
+            onChange={(event) => handleSearchChange(event.target.value)}
             placeholder={t.filterByName}
             aria-label={t.filterByNameAria}
           />
@@ -762,7 +998,7 @@ function ResourcesPage({ onLock, onAdminLogin, t, sessionExpiresAt, lastSyncMinu
             </div>
             <div>
               <dt>{t.totalSize}</dt>
-              <dd>{resourceTotals.totalSize}</dd>
+              <dd>{resourceTotals.pageBytes}</dd>
             </div>
             <div>
               <dt>{t.lastSync}</dt>
@@ -774,16 +1010,27 @@ function ResourcesPage({ onLock, onAdminLogin, t, sessionExpiresAt, lastSyncMinu
         <button className="text-nav" onClick={onLock}>{t.backToLogin}</button>
       </aside>
 
-      <section className="resources-grid" aria-label={t.resourcesGridAria}>
-        {loading && <p className="resources-empty">{t.downloading}</p>}
-        {error && <p className="form-error" role="alert">{error}</p>}
-        {!loading && !error && filtered.length === 0 && (
-          <p className="resources-empty">{t.noFiles}</p>
-        )}
-        {filtered.map((item) => (
-          <ResourceCard key={item.id} item={item} t={t} />
-        ))}
-      </section>
+      <div className="resources-main">
+        <section className="resources-grid" aria-label={t.resourcesGridAria}>
+          {loading && <p className="resources-empty">{t.downloading}</p>}
+          {error && <p className="form-error" role="alert">{error}</p>}
+          {!loading && !error && files.length === 0 && (
+            <p className="resources-empty">{t.noFiles}</p>
+          )}
+          {files.map((item) => (
+            <ResourceCard key={item.id} item={item} t={t} onPreview={setPreviewFile} />
+          ))}
+        </section>
+
+        <Pagination
+          page={page}
+          totalPages={totalPages}
+          total={total}
+          pageSize={PAGE_SIZE}
+          onPageChange={setPage}
+          t={t}
+        />
+      </div>
 
       {adminGateOpen && (
         <AdminGateModal
@@ -792,13 +1039,23 @@ function ResourcesPage({ onLock, onAdminLogin, t, sessionExpiresAt, lastSyncMinu
           onAdminLogin={onAdminLogin}
         />
       )}
+
+      {previewFile && (
+        <PreviewModal
+          file={previewFile}
+          t={t}
+          onClose={() => setPreviewFile(null)}
+        />
+      )}
     </main>
   );
 }
 
 function AdminPage({ onSignOut, t }) {
+  const [adminView, setAdminView] = useState('dashboard');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  const [folderName, setFolderName] = useState('');
   const [search, setSearch] = useState('');
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -806,6 +1063,8 @@ function AdminPage({ onSignOut, t }) {
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
   const [selectedFile, setSelectedFile] = useState(null);
+  const [stats, setStats] = useState(null);
+  const [statsLoading, setStatsLoading] = useState(true);
   const fileInputRef = useRef(null);
 
   const loadFiles = useCallback(async () => {
@@ -828,6 +1087,24 @@ function AdminPage({ onSignOut, t }) {
     loadFiles();
   }, [loadFiles]);
 
+  // Load dashboard stats
+  useEffect(() => {
+    let cancelled = false;
+    async function loadStats() {
+      setStatsLoading(true);
+      try {
+        const data = await adminGetStats();
+        if (!cancelled) setStats(data);
+      } catch {
+        if (!cancelled) setStats(null);
+      } finally {
+        if (!cancelled) setStatsLoading(false);
+      }
+    }
+    loadStats();
+    return () => { cancelled = true; };
+  }, []);
+
   const handleUpload = async (event) => {
     event.preventDefault();
     if (!selectedFile) {
@@ -843,10 +1120,12 @@ function AdminPage({ onSignOut, t }) {
       formData.append('file', selectedFile);
       if (title.trim()) formData.append('title', title.trim());
       if (description.trim()) formData.append('description', description.trim());
+      formData.append('folder_name', folderName.trim() || 'default');
 
       await adminUploadFile(formData);
       setTitle('');
       setDescription('');
+      setFolderName('');
       setSelectedFile(null);
       if (fileInputRef.current) fileInputRef.current.value = '';
       await loadFiles();
@@ -881,7 +1160,6 @@ function AdminPage({ onSignOut, t }) {
     const f = event.target.files?.[0];
     setSelectedFile(f || null);
     setUploadError('');
-    // Auto-fill title from filename if empty
     if (f && !title.trim()) {
       const name = f.name.replace(/\.pdf$/i, '');
       setTitle(name);
@@ -902,7 +1180,16 @@ function AdminPage({ onSignOut, t }) {
           <p>{t.securityLevel}</p>
 
           <nav className="admin-nav" aria-label={t.adminNavigation}>
-            <button className="admin-nav__item admin-nav__item--active">
+            <button
+              className={`admin-nav__item ${adminView === 'dashboard' ? 'admin-nav__item--active' : ''}`}
+              onClick={() => setAdminView('dashboard')}
+            >
+              <Icon name="layout-dashboard" size={22} /> {t.dashboard}
+            </button>
+            <button
+              className={`admin-nav__item ${adminView === 'vault' ? 'admin-nav__item--active' : ''}`}
+              onClick={() => setAdminView('vault')}
+            >
               <Icon name="lock" size={22} /> {t.vault}
             </button>
           </nav>
@@ -918,126 +1205,222 @@ function AdminPage({ onSignOut, t }) {
         </div>
       </aside>
 
-      <section className="admin-content">
-        <div className="upload-section">
-          <header>
-            <h2>{t.uploadResource}</h2>
-            <p>{t.uploadDescription}</p>
+      {/* ---- Dashboard View ---- */}
+      {adminView === 'dashboard' && (
+        <section className="admin-content admin-content--dashboard">
+          <header className="dashboard-header">
+            <h2>{t.dashboard}</h2>
+            <p>{t.dashboardDesc}</p>
           </header>
 
-          <form className="upload-card upload-card--compact" onSubmit={handleUpload}>
-            <label className="form-label" htmlFor="documentTitle">{t.documentTitle}</label>
-            <input
-              id="documentTitle"
-              className="text-input"
-              value={title}
-              onChange={(event) => setTitle(event.target.value)}
-              placeholder={t.documentTitlePlaceholder}
-            />
+          {statsLoading && <p className="resources-empty">{t.downloading}</p>}
+          {!statsLoading && !stats && <p className="resources-empty">{t.noStats}</p>}
+          {!statsLoading && stats && (
+            <>
+              <div className="stats-cards">
+                <div className="stat-card">
+                  <div className="stat-card__icon stat-card__icon--storage">
+                    <Icon name="database" size={24} />
+                  </div>
+                  <div className="stat-card__body">
+                    <span className="stat-card__label">{t.totalStorage}</span>
+                    <strong className="stat-card__value">{formatFileSize(stats.totalStorage || 0)}</strong>
+                  </div>
+                </div>
+                <div className="stat-card">
+                  <div className="stat-card__icon stat-card__icon--visitors">
+                    <Icon name="users" size={24} />
+                  </div>
+                  <div className="stat-card__body">
+                    <span className="stat-card__label">{t.todayVisitors}</span>
+                    <strong className="stat-card__value">{stats.todayVisitors ?? 0}</strong>
+                  </div>
+                </div>
+                <div className="stat-card">
+                  <div className="stat-card__icon stat-card__icon--downloads">
+                    <Icon name="trending-up" size={24} />
+                  </div>
+                  <div className="stat-card__body">
+                    <span className="stat-card__label">{t.todayDownloads}</span>
+                    <strong className="stat-card__value">{stats.todayDownloads ?? 0}</strong>
+                  </div>
+                </div>
+              </div>
 
-            <label className="form-label" htmlFor="documentDescription">DESCRIPTION / 描述</label>
-            <textarea
-              id="documentDescription"
-              className="text-input"
-              value={description}
-              onChange={(event) => setDescription(event.target.value)}
-              placeholder="Optional description / notes"
-              rows={3}
-              style={{ height: 'auto', padding: '8px 13px', resize: 'vertical' }}
-            />
+              <div className="dashboard-top-table">
+                <div className="dashboard-top-header">
+                  <Icon name="award" size={20} />
+                  <h3>{t.topDownloads}</h3>
+                </div>
+                {stats.topDownloads && stats.topDownloads.length > 0 ? (
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>{t.rank}</th>
+                        <th>{t.tableTitle}</th>
+                        <th>{t.tableDownloads}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {stats.topDownloads.map((item, idx) => (
+                        <tr key={item.id || idx}>
+                          <td className="top-rank">#{idx + 1}</td>
+                          <td>
+                            <span className="admin-file-title">
+                              <Icon name="file" size={18} /> {item.title}
+                            </span>
+                          </td>
+                          <td>{item.download_count ?? 0}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                ) : (
+                  <p className="resources-empty" style={{ padding: 24 }}>{t.noFiles}</p>
+                )}
+              </div>
+            </>
+          )}
+        </section>
+      )}
 
-            <label className="form-label">{t.filePayload}</label>
-            <button
-              type="button"
-              className="drop-zone"
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <Icon name="upload" size={34} />
-              {selectedFile ? (
-                <span>{selectedFile.name}</span>
-              ) : (
-                <span>{t.dropZoneText}<br />{t.dropZonePdf}</span>
-              )}
-              <small>{t.maxSize}</small>
+      {/* ---- Vault View ---- */}
+      {adminView === 'vault' && (
+        <section className="admin-content">
+          <div className="upload-section">
+            <header>
+              <h2>{t.uploadResource}</h2>
+              <p>{t.uploadDescription}</p>
+            </header>
+
+            <form className="upload-card upload-card--compact" onSubmit={handleUpload}>
+              <label className="form-label" htmlFor="documentTitle">{t.documentTitle}</label>
               <input
-                ref={fileInputRef}
-                type="file"
-                accept="application/pdf"
-                hidden
-                onChange={handleFileChange}
+                id="documentTitle"
+                className="text-input"
+                value={title}
+                onChange={(event) => setTitle(event.target.value)}
+                placeholder={t.documentTitlePlaceholder}
               />
-            </button>
 
-            {uploadError && <p className="form-error" role="alert">{uploadError}</p>}
+              <label className="form-label" htmlFor="documentDescription">DESCRIPTION / 描述</label>
+              <textarea
+                id="documentDescription"
+                className="text-input"
+                value={description}
+                onChange={(event) => setDescription(event.target.value)}
+                placeholder="Optional description / notes"
+                rows={3}
+                style={{ height: 'auto', padding: '8px 13px', resize: 'vertical' }}
+              />
 
-            <button
-              className="primary-button process-button"
-              type="submit"
-              disabled={uploading || !selectedFile}
-            >
-              {uploading ? <Icon name="spinner" size={17} /> : t.processUpload}
-            </button>
-          </form>
-        </div>
+              <label className="form-label" htmlFor="folderName">{t.folderName}</label>
+              <input
+                id="folderName"
+                className="text-input"
+                value={folderName}
+                onChange={(event) => setFolderName(event.target.value)}
+                placeholder={t.folderNamePlaceholder}
+              />
+              <small className="folder-hint">{t.folderNameHint}</small>
 
-        <div className="management-section">
-          <div className="management-head">
-            <div>
-              <h2>{t.resourceManagement}</h2>
-              <p>{t.managementDescription}</p>
+              <label className="form-label">{t.filePayload}</label>
+              <button
+                type="button"
+                className="drop-zone"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <Icon name="upload" size={34} />
+                {selectedFile ? (
+                  <span>{selectedFile.name}</span>
+                ) : (
+                  <span>{t.dropZoneText}<br />{t.dropZonePdf}</span>
+                )}
+                <small>{t.maxSize}</small>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="application/pdf"
+                  hidden
+                  onChange={handleFileChange}
+                />
+              </button>
+
+              {uploadError && <p className="form-error" role="alert">{uploadError}</p>}
+
+              <button
+                className="primary-button process-button"
+                type="submit"
+                disabled={uploading || !selectedFile}
+              >
+                {uploading ? <Icon name="spinner" size={17} /> : t.processUpload}
+              </button>
+            </form>
+          </div>
+
+          <div className="management-section">
+            <div className="management-head">
+              <div>
+                <h2>{t.resourceManagement}</h2>
+                <p>{t.managementDescription}</p>
+              </div>
+              <label className="admin-search">
+                <Icon name="search" size={18} />
+                <input
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder={t.searchResources}
+                  aria-label={t.searchResourcesAria}
+                />
+              </label>
             </div>
-            <label className="admin-search">
-              <Icon name="search" size={18} />
-              <input
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder={t.searchResources}
-                aria-label={t.searchResourcesAria}
-              />
-            </label>
-          </div>
 
-          <div className="table-card" role="region" aria-label={t.managementTableAria}>
-            {error && <p className="form-error" style={{ padding: 16 }} role="alert">{error}</p>}
-            {loading && <p style={{ padding: 16 }}>{t.downloading}</p>}
-            {!loading && !error && files.length === 0 && (
-              <p style={{ padding: 16 }}>{t.noFilesAdmin}</p>
-            )}
-            {files.length > 0 && (
-              <table>
-                <thead>
-                  <tr>
-                    <th>{t.tableTitle}</th>
-                    <th>{t.tableDownloads}</th>
-                    <th>{t.tableActions}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredFiles.map((file) => (
-                    <tr key={file.id}>
-                      <td>
-                        <span className="admin-file-title">
-                          <Icon name="file" size={18} /> {file.title}
-                        </span>
-                      </td>
-                      <td>{file.download_count ?? 0}</td>
-                      <td>
-                        <button
-                          className="icon-button"
-                          aria-label={`${t.deleteFile} ${file.title}`}
-                          onClick={() => handleDelete(file)}
-                        >
-                          <Icon name="trash" size={19} />
-                        </button>
-                      </td>
+            <div className="table-card" role="region" aria-label={t.managementTableAria}>
+              {error && <p className="form-error" style={{ padding: 16 }} role="alert">{error}</p>}
+              {loading && <p style={{ padding: 16 }}>{t.downloading}</p>}
+              {!loading && !error && files.length === 0 && (
+                <p style={{ padding: 16 }}>{t.noFilesAdmin}</p>
+              )}
+              {files.length > 0 && (
+                <table>
+                  <thead>
+                    <tr>
+                      <th>{t.tableTitle}</th>
+                      <th>{t.tableFolder}</th>
+                      <th>{t.tableDownloads}</th>
+                      <th>{t.tableActions}</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
+                  </thead>
+                  <tbody>
+                    {filteredFiles.map((file) => (
+                      <tr key={file.id}>
+                        <td>
+                          <span className="admin-file-title">
+                            <Icon name="file" size={18} /> {file.title}
+                          </span>
+                        </td>
+                        <td>
+                          <span className="folder-tag">{file.folder_name || 'default'}</span>
+                        </td>
+                        <td>{file.download_count ?? 0}</td>
+                        <td>
+                          <button
+                            className="icon-button"
+                            aria-label={`${t.deleteFile} ${file.title}`}
+                            onClick={() => handleDelete(file)}
+                          >
+                            <Icon name="trash" size={19} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
+      )}
     </main>
   );
 }

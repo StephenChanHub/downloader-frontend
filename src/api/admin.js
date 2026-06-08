@@ -46,3 +46,11 @@ export async function adminDeleteFile(id) {
     method: 'DELETE',
   });
 }
+
+/**
+ * GET /api/admin/stats
+ * Returns: { totalStorage, totalFiles, todayVisitors, todayDownloads, topDownloads }
+ */
+export async function adminGetStats() {
+  return adminFetch('/api/admin/stats');
+}
