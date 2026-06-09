@@ -1243,7 +1243,7 @@ th:nth-child(4) {
 /* ---- Folder groups (admin vault) ---- */
 
 .folder-groups-scroll {
-  max-height: 520px;
+  max-height: 60vh;
   overflow-y: auto;
   border: 1px solid var(--line);
   background: #fff;
@@ -1281,10 +1281,18 @@ th:nth-child(4) {
 }
 
 .folder-group__count {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 500;
+  margin-left: 2px;
+}
+
+.folder-group__size {
   margin-left: auto;
   color: var(--muted);
   font-size: 13px;
   font-weight: 500;
+  font-family: "Courier New", monospace;
 }
 
 .folder-group__table {

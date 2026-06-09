@@ -1278,7 +1278,11 @@ const AdminPage = memo(function AdminPage({ onSignOut, t }) {
     });
     return Object.keys(groups)
       .sort()
-      .map((name) => ({ name, files: groups[name] }));
+      .map((name) => ({
+        name,
+        files: groups[name],
+        totalSize: groups[name].reduce((sum, f) => sum + (f.size || 0), 0),
+      }));
   }, [filteredFiles]);
 
   const toggleFolder = (folderName) => {
@@ -1523,6 +1527,7 @@ const AdminPage = memo(function AdminPage({ onSignOut, t }) {
                     <Icon name={isCollapsed ? 'folder' : 'folder-open'} size={18} strokeWidth={2.2} />
                     <span className="folder-group__name">{group.name}</span>
                     <span className="folder-group__count">({group.files.length})</span>
+                    <span className="folder-group__size">{formatFileSize(group.totalSize)}</span>
                   </button>
                   {!isCollapsed && (
                     <div className="table-card folder-group__table">
