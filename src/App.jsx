@@ -152,9 +152,11 @@ const copy = {
     searchResourcesAria: 'Search resources',
     managementTableAria: 'Resource management table',
     tableTitle: 'TITLE',
+    tableSize: 'SIZE',
     tableFolder: 'FOLDER',
     tableDownloads: 'DOWNLOADS',
     tableActions: 'ACTIONS',
+    storageAvailable: 'free of 10 GB',
     deleteFile: 'Delete',
     deleteConfirm: 'Are you sure you want to delete "{title}"? This action cannot be undone.',
     uploadSuccess: 'File uploaded successfully.',
@@ -247,9 +249,11 @@ const copy = {
     searchResourcesAria: '搜索资源',
     managementTableAria: '资源管理表格',
     tableTitle: '标题',
+    tableSize: '大小',
     tableFolder: '文件夹',
     tableDownloads: '下载次数',
     tableActions: '操作',
+    storageAvailable: '可用 / 共 10 GB',
     deleteFile: '删除',
     deleteConfirm: '确定要删除"{title}"吗？此操作不可撤销。',
     uploadSuccess: '文件上传成功。',
@@ -1341,6 +1345,13 @@ const AdminPage = memo(function AdminPage({ onSignOut, t }) {
                   <div className="stat-card__body">
                     <span className="stat-card__label">{t.totalStorage}</span>
                     <strong className="stat-card__value">{formatFileSize(stats.totalStorage || 0)}</strong>
+                    <span className="stat-card__sub">{formatFileSize(Math.max(0, 10 * 1024 * 1024 * 1024 - (stats.totalStorage || 0)))} {t.storageAvailable}</span>
+                    <div className="storage-bar">
+                      <div
+                        className="storage-bar__fill"
+                        style={{ width: `${Math.min(100, ((stats.totalStorage || 0) / (10 * 1024 * 1024 * 1024)) * 100)}%` }}
+                      />
+                    </div>
                   </div>
                 </div>
                 <div className="stat-card">
@@ -1496,6 +1507,7 @@ const AdminPage = memo(function AdminPage({ onSignOut, t }) {
             {!loading && !error && files.length === 0 && (
               <p style={{ padding: 16 }}>{t.noFilesAdmin}</p>
             )}
+            <div className="folder-groups-scroll">
             {files.length > 0 && folderGroups.map((group) => {
               const isCollapsed = collapsedFolders.has(group.name);
               return (
@@ -1517,6 +1529,7 @@ const AdminPage = memo(function AdminPage({ onSignOut, t }) {
                         <thead>
                           <tr>
                             <th>{t.tableTitle}</th>
+                            <th>{t.tableSize}</th>
                             <th>{t.tableDownloads}</th>
                             <th>{t.tableActions}</th>
                           </tr>
@@ -1529,6 +1542,7 @@ const AdminPage = memo(function AdminPage({ onSignOut, t }) {
                                   <Icon name="file" size={18} /> {file.title}
                                 </span>
                               </td>
+                              <td className="admin-file-size">{formatFileSize(file.size)}</td>
                               <td>{file.download_count ?? 0}</td>
                               <td>
                                 <button
@@ -1548,6 +1562,7 @@ const AdminPage = memo(function AdminPage({ onSignOut, t }) {
                 </div>
               );
             })}
+            </div>
           </div>
         </section>
       )}
