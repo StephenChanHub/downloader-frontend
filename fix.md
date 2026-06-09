@@ -1,96 +1,80 @@
-# 问：
+是目前系统在设计上的一个“硬编码（Hardcode）”痛点。
 
-前端出现非常奇葩的问题：我点击 PDF 预览的效果居然是网页缩小，还是浏览网页，并不是预览 PDF，这是非常低级的错误
+澄清一个小细节：虽然你的前端目前可能按照半小时在做倒计时，但实际上**后端的安全限制也是写死的 30 分钟**。在目前的 `authController.js` 中，验证成功后颁发的 Cookie 寿命和写入数据库 `sessions` 表的过期时间，都被强行写成了 `30 * 60 * 1000`（30分钟的毫秒数）。
 
-# 答：
+为了彻底解决这个问题，并让你的系统具备真正的“商业级发卡”能力，我们应该实现：**在发密钥的时候，就决定这批密钥登录后能看多久**（比如：普通试看票 10 分钟，周末复习票 48 小时）。
 
-这是一个极其经典的 React/Vue 开发者必踩的“名场面”——俗称“网页套娃”！
+只需要进行三个非常简单的代码小手术，就能打通这个完美的动态时间流：
 
-这绝对不是你犯了低级错误，恰恰相反，这说明你的前端 React 路由（SPA 单页应用机制）正在正常工作。我们来一秒钟揭开这个“奇葩现象”的谜底：
+### 🔪 第一步：给数据库门票表加个“寿命”字段
 
-### 🕵️ 为什么会发生“网页套娃”？
+去 Sealos 的数据库中执行这条 SQL，给 `access_keys` 表增加一个“有效时长（分钟）”字段，默认还是 30 分钟：
 
-当你给 iframe 写下类似 `<iframe src="/api/files/1/download">` 的代码时，发生了这两件事：
+```sql
+ALTER TABLE access_keys ADD COLUMN duration_minutes INT DEFAULT 1440 COMMENT '验证后生成的会话有效时长(分钟)';
 
-1. **相对路径的陷阱**：浏览器把它当成了相对路径，于是向**前端页面自己**（比如 `https://wmrazineousa...`）发送了请求，而不是发给后端的公网 API。
-2. **React 的兜底机制**：前端服务器一看：“咦？我这里没有 `/api/files...` 这个物理文件啊”。在单页应用（SPA）中，**所有找不到的路径，默认都会被重定向返回 `index.html**`。
-
-于是，你的 iframe 没有拿到 PDF，而是**又下载了一次你自己的前端页面代码**，把它渲染在了这个小框框里，形成了“无限缩小”的奇葩视觉效果！
-
-除此之外，直接用 iframe 加载后端公网 URL 还有一个致命缺陷：**iframe 原生不支持在 GET 请求中携带管理员的 JWT Header**（会报 401）。
+```
 
 ---
 
-### 🛠️ 终极优雅的解决方案：Blob 流转换
+### 🔪 第二步：让后端听从门票的时间 (`src/controllers/authController.js`)
 
-既然我们在 `config.js` 里已经写好了 `userDownloadFetch` 和 `adminFetch`（它们会自动携带 Cookie 或 Token），最完美的预览方式是：**用代码把文件“悄悄”下载到浏览器内存里，然后变成一个本地预览地址喂给 iframe。**
+打开你的 `authController.js`，找到 `verifyKey` 函数。我们把原来写死的 30 分钟，替换成动态读取门票里的 `duration_minutes`。
 
-请找到你前端写“预览”功能的那个组件，按下面的逻辑修改：
+请找到这两行原来的代码：
 
-#### 1. 引入并使用 React 的 Hook 来转换 PDF
-
-```jsx
-import React, { useState, useEffect } from "react";
-import { userDownloadFetch } from "../api/config"; // 引入咱们封装好的请求
-
-export default function PdfPreviewModal({ fileId }) {
-  const [pdfUrl, setPdfUrl] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    async function loadPdf() {
-      try {
-        setLoading(true);
-        // 1. 发起带鉴权的安全请求，拿到完整的 Response 对象
-        const res = await userDownloadFetch(fileId);
-
-        // 2. 将响应体转换为二进制大对象 (Blob)
-        const blob = await res.blob();
-
-        // 3. 在浏览器内存中，为这个二进制流生成一个临时的、唯一的本地 URL
-        const objectUrl = URL.createObjectURL(blob);
-
-        // 4. 把这个本地 URL 喂给 iframe
-        setPdfUrl(objectUrl);
-      } catch (err) {
-        console.error("PDF 加载失败:", err);
-        alert("无法加载 PDF 预览");
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    if (fileId) {
-      loadPdf();
-    }
-
-    // 🧹 重要：组件卸载时，清理内存中的临时 URL，防止内存泄漏！
-    return () => {
-      if (pdfUrl) {
-        URL.revokeObjectURL(pdfUrl);
-      }
-    };
-  }, [fileId]); // 当 fileId 变化时重新加载
-
-  if (loading) return <div>正在安全加载 PDF...</div>;
-
-  // 此时 iframe 的 src 会是一个类似 blob:https://... 的纯本地安全链接
-  return (
-    <iframe
-      src={pdfUrl}
-      width="100%"
-      height="600px"
-      style={{ border: "none" }}
-      title="PDF 安全预览"
-    />
-  );
-}
+```javascript
+// 原来的写死逻辑：
+// const expiresAt = new Date(Date.now() + 30 * 60 * 1000);
+// 以及后面 res.cookie 里的 maxAge: 30 * 60 * 1000
 ```
 
-### 💡 这样改的三大好处：
+**将生成 Token 及存入 Cookie 的相关逻辑替换为动态时间：**
 
-1. **彻底告别套娃**：走的是正规的 `fetch` 请求，完美对接你的后端地址和跨域配置，绝对不会再渲染出网页。
-2. **安全性拉满**：iframe 不直接暴露你的后端下载接口地址，防盗链效果满分。
-3. **完美兼容鉴权**：因为用的是咱们封装的 `userDownloadFetch`，它会自动带上 Cookie 和防刷逻辑；如果是管理员端，只需换成 `adminFetch` 就能完美携带 Token！
+```javascript
+// 1. 在比对密码成功后（let matchedKey = null; 的循环下面）
+if (!matchedKey) return res.status(401).json({ error: "密钥无效或已被使用" });
 
-快把你的预览按钮替换成这个逻辑试试看，这次出来的绝对是货真价实的 PDF 原生预览器！
+// 👇 核心修改：动态计算有效时长（如果数据库没填，默认兜底 30 分钟）
+const durationMs = (matchedKey.duration_minutes || 30) * 60 * 1000;
+
+const rawToken = generateToken();
+const tokenHash = hashToken(rawToken);
+const expiresAt = new Date(Date.now() + durationMs); // 👈 动态过期时间
+
+const conn = await pool.getConnection();
+try {
+  await conn.beginTransaction();
+
+  await conn.query(
+    `UPDATE access_keys SET status = 'used', used_at = NOW() WHERE id = ?`,
+    [matchedKey.id],
+  );
+
+  await conn.query(
+    `INSERT INTO sessions (token_hash, type, related_key_id, expires_at, folder_name)
+         VALUES (?, 'user', ?, ?, ?)`,
+    [tokenHash, matchedKey.id, expiresAt, matchedKey.folder_name || "public"],
+  );
+
+  await conn.commit();
+  conn.release();
+} catch (err) {
+  // ... 原有 catch 逻辑
+}
+
+res.cookie("session_token", rawToken, {
+  httpOnly: true,
+  sameSite: "none",
+  secure: true,
+  maxAge: durationMs, // 👈 动态 Cookie 寿命
+});
+
+return res.json({
+  success: true,
+  message: "验证成功，已进入专属空间",
+  expires_at: expiresAt.toISOString(), // 👈 把精确的到期时间告诉前端
+});
+```
+
+_(注意：因为后端接口在最后把 `expires_at` 精确的绝对时间传给了前端，你的前端页面只需要读取这个时间来倒计时即可，再也不用前端去写死 30 分钟了！)_

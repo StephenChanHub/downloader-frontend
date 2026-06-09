@@ -6,7 +6,6 @@ import { formatFileSize, formatRemainingTime } from './utils/format';
 
 // ---- constants ------------------------------------------------------------
 
-const SESSION_DURATION_MS = 30 * 60 * 1000; // user cookie session
 const ADMIN_SESSION_MS = 24 * 60 * 60 * 1000; // admin JWT
 const USER_SESSION_STORAGE_KEY = 'secure-doc-access-session';
 const ADMIN_SESSION_STORAGE_KEY = 'secure-doc-admin-session';
@@ -14,7 +13,9 @@ const ADMIN_SESSION_STORAGE_KEY = 'secure-doc-admin-session';
 // ---- local-storage session helpers ----------------------------------------
 
 function persistUserSession(expiresAtISO) {
-  const expiresAt = Date.parse(expiresAtISO) || Date.now() + SESSION_DURATION_MS;
+  // Backend now sends the precise expires_at — use it directly.
+  // If missing/invalid, expire immediately to force re-login.
+  const expiresAt = Date.parse(expiresAtISO) || Date.now();
   localStorage.setItem(USER_SESSION_STORAGE_KEY, JSON.stringify({ expiresAt }));
   return expiresAt;
 }
@@ -110,7 +111,7 @@ const copy = {
     adminEntrance: 'Admin entrance',
     availableResourcesLine1: 'Available',
     availableResourcesLine2: 'Resources',
-    resourcesDescription: 'Access verified. One key unlocks all encrypted files for 30 minutes.',
+    resourcesDescription: 'Access verified. One key unlocks all encrypted files for the session duration.',
     filterByName: 'Filter by name...',
     filterByNameAria: 'Filter by name',
     downloadAll: 'DOWNLOAD ALL',
@@ -125,7 +126,7 @@ const copy = {
     resourcesGridAria: 'Available resources',
     accessSessionActive: 'Access Session Active',
     keyValidFor: 'Key valid for',
-    sessionNote: 'No need to enter the key again while the 30-minute session is active.',
+    sessionNote: 'No need to re-enter the key while the session is active.',
     sessionExpired: 'Your access key has expired. Please verify again.',
     readyToDownload: 'Encrypted file unlocked for this session.',
     adminConsole: 'Admin Console',
@@ -207,7 +208,7 @@ const copy = {
     adminEntrance: '管理员入口',
     availableResourcesLine1: '可用',
     availableResourcesLine2: '资源',
-    resourcesDescription: '访问已验证，一个密钥可在 30 分钟内解锁所有加密文件。',
+    resourcesDescription: '访问已验证，一个密钥可在会话有效期内解锁所有加密文件。',
     filterByName: '按名称筛选...',
     filterByNameAria: '按名称筛选',
     downloadAll: '全部下载',
@@ -222,7 +223,7 @@ const copy = {
     resourcesGridAria: '可用资源',
     accessSessionActive: '访问会话已激活',
     keyValidFor: '密钥剩余有效期',
-    sessionNote: '30 分钟会话有效期内，无需再次输入密钥。',
+    sessionNote: '会话有效期内，无需再次输入密钥。',
     sessionExpired: '访问密钥已过期，请重新验证。',
     readyToDownload: '当前会话已解锁该加密文件。',
     adminConsole: '管理控制台',
