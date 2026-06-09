@@ -36,7 +36,7 @@ export async function adminFetch(path, options = {}) {
     if (res.status === 401) {
       localStorage.removeItem('admin_token');
     }
-    const err = new Error(data.error || `Request failed (${res.status})`);
+    const err = new Error(`[${res.status}] ${data.error || 'Request failed'}`);
     err.status = res.status;
     err.body = data;
     throw err;
@@ -66,7 +66,7 @@ export async function userFetch(path, options = {}) {
   const data = await res.json().catch(() => ({}));
 
   if (!res.ok) {
-    const err = new Error(data.error || `Request failed (${res.status})`);
+    const err = new Error(`[${res.status}] ${data.error || 'Request failed'}`);
     err.status = res.status;
     err.body = data;
     throw err;
