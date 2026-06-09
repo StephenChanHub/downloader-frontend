@@ -374,6 +374,14 @@ select:focus,
   color: #000;
 }
 
+.resource-card__size {
+  font-family: "Courier New", monospace;
+  color: var(--muted);
+  font-size: 14px;
+  margin-left: auto;
+  align-self: center;
+}
+
 .resource-card h2 {
   margin: 18px 0 0;
   min-height: 54px;

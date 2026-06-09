@@ -109,9 +109,7 @@ const copy = {
     unlockAdmin: 'Access Admin',
     emptyKeyError: 'Please enter a valid key.',
     adminEntrance: 'Admin entrance',
-    availableResourcesLine1: 'Available',
-    availableResourcesLine2: 'Resources',
-    resourcesDescription: 'Access verified. One key unlocks all encrypted files for the session duration.',
+    availableResources: 'Resources Unlocked',
     filterByName: 'Filter by name...',
     filterByNameAria: 'Filter by name',
     downloadAll: 'DOWNLOAD ALL',
@@ -126,7 +124,7 @@ const copy = {
     resourcesGridAria: 'Available resources',
     accessSessionActive: 'Access Session Active',
     keyValidFor: 'Key valid for',
-    sessionNote: 'No need to re-enter the key while the session is active.',
+    sessionNote: 'Please complete downloads within the session window. Closing the browser may invalidate your key.',
     sessionExpired: 'Your access key has expired. Please verify again.',
     readyToDownload: 'Encrypted file unlocked for this session.',
     adminConsole: 'Admin Console',
@@ -206,9 +204,7 @@ const copy = {
     unlockAdmin: '进入管理后台',
     emptyKeyError: '请输入有效密钥。',
     adminEntrance: '管理员入口',
-    availableResourcesLine1: '可用',
-    availableResourcesLine2: '资源',
-    resourcesDescription: '访问已验证，一个密钥可在会话有效期内解锁所有加密文件。',
+    availableResources: '资源已解锁',
     filterByName: '按名称筛选...',
     filterByNameAria: '按名称筛选',
     downloadAll: '全部下载',
@@ -223,7 +219,7 @@ const copy = {
     resourcesGridAria: '可用资源',
     accessSessionActive: '访问会话已激活',
     keyValidFor: '密钥剩余有效期',
-    sessionNote: '会话有效期内，无需再次输入密钥。',
+    sessionNote: '请在密钥有效期内完成下载，尽量一次性下载完毕。关闭浏览器可能导致密钥失效。',
     sessionExpired: '访问密钥已过期，请重新验证。',
     readyToDownload: '当前会话已解锁该加密文件。',
     adminConsole: '管理控制台',
@@ -903,18 +899,13 @@ function ResourceCard({ item, t, onPreview }) {
     <article className="resource-card">
       <div className="resource-card__top">
         <div className="resource-icon"><Icon name="file" size={25} strokeWidth={2.2} /></div>
+        <span className="resource-card__size">{formatFileSize(item.size)}</span>
         {item.download_count > 0 && (
           <span className="download-count-badge">{item.download_count} {t.downloadsBadge}</span>
         )}
       </div>
 
       <h2>{item.title}</h2>
-
-      <div className="resource-meta resource-meta--single">
-        <span>{formatFileSize(item.size)}</span>
-      </div>
-
-      <p className="resource-download-note">{t.readyToDownload}</p>
 
       {error && <p className="form-error" role="alert">{error}</p>}
 
@@ -1055,9 +1046,8 @@ function ResourcesPage({ onLock, onAdminLogin, t, sessionExpiresAt, lastSyncMinu
           onClick={revealAdminGate}
           onMouseDown={(event) => event.preventDefault()}
         >
-          {t.availableResourcesLine1}<br />{t.availableResourcesLine2}
+          {t.availableResources}
         </h1>
-        <p>{t.resourcesDescription}</p>
 
         <div className="session-card">
           <span>{t.accessSessionActive}</span>
