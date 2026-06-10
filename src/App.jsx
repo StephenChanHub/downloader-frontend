@@ -1502,7 +1502,7 @@ const AdminPage = memo(function AdminPage({ onSignOut, t }) {
             {!loading && !error && files.length === 0 && (
               <p style={{ padding: 16 }}>{t.noFilesAdmin}</p>
             )}
-            <div className="folder-groups-scroll">
+            <div className="folder-groups-area">
             {files.length > 0 && folderGroups.map((group) => {
               const isCollapsed = collapsedFolders.has(group.name);
               return (
@@ -1520,7 +1520,7 @@ const AdminPage = memo(function AdminPage({ onSignOut, t }) {
                     <span className="folder-group__size">{formatFileSize(group.totalSize)}</span>
                   </button>
                   {!isCollapsed && (
-                    <div className="table-card folder-group__table">
+                    <div className="folder-group__body">
                       <table>
                         <thead>
                           <tr>

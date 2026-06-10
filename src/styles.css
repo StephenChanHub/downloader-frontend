@@ -1250,11 +1250,10 @@ th:nth-child(4) {
 
 /* ---- Folder groups (admin vault) ---- */
 
-.folder-groups-scroll {
-  max-height: 60vh;
-  overflow-y: auto;
+.folder-groups-area {
   border: 1px solid var(--line);
   background: #fff;
+  overflow: hidden;
 }
 
 .folder-group {
@@ -1271,13 +1270,14 @@ th:nth-child(4) {
   align-items: center;
   gap: 10px;
   height: 46px;
-  border: 1px solid var(--line);
   background: var(--soft);
   color: #000;
   padding: 0 17px;
   font-size: 14px;
   font-weight: 700;
   text-align: left;
+  border: 0;
+  flex-shrink: 0;
 }
 
 .folder-group__header:hover {
@@ -1303,29 +1303,61 @@ th:nth-child(4) {
   font-family: "Courier New", monospace;
 }
 
-.folder-group__table {
-  width: 100%;
-  border-top: 0;
+.folder-group__body {
+  max-height: 220px;
+  overflow-y: auto;
+  border-top: 1px solid var(--line);
 }
 
-.folder-group__table td:nth-child(1) {
+.folder-group__body table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 600px;
+}
+
+.folder-group__body th {
+  height: 36px;
+  background: var(--soft);
+  padding: 0 17px;
+  color: var(--subtle);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.folder-group__body td {
+  height: 56px;
+  padding: 0 17px;
+  font-size: 14px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: middle;
+}
+
+.folder-group__body tr:last-child td {
+  border-bottom: 0;
+}
+
+.folder-group__body td:nth-child(1) {
   width: 46%;
 }
 
-.folder-group__table td:nth-child(2),
-.folder-group__table th:nth-child(2) {
+.folder-group__body td:nth-child(2),
+.folder-group__body th:nth-child(2) {
   width: 16%;
   text-align: right;
 }
 
-.folder-group__table td:nth-child(3),
-.folder-group__table th:nth-child(3) {
+.folder-group__body td:nth-child(3),
+.folder-group__body th:nth-child(3) {
   width: 18%;
   text-align: right;
 }
 
-.folder-group__table td:nth-child(4),
-.folder-group__table th:nth-child(4) {
+.folder-group__body td:nth-child(4),
+.folder-group__body th:nth-child(4) {
   width: 20%;
   text-align: center;
 }
