@@ -1304,7 +1304,7 @@ th:nth-child(4) {
 }
 
 .folder-group__body {
-  max-height: 220px;
+  max-height: 600px;
   overflow-y: auto;
   border-top: 1px solid var(--line);
 }
