@@ -323,8 +323,29 @@ select:focus,
 }
 
 .text-nav {
-  display: none;
-  padding: 18px 0 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 0 18px;
+  margin-top: 24px;
+  border: 1px solid var(--line-dark);
+  background: #fff;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.text-nav:hover {
+  background: #f3f3f3;
+  color: #000;
+  border-color: #999;
+}
+
+.text-nav:active {
+  background: #e8e8e8;
 }
 
 .resources-grid {
@@ -715,10 +736,6 @@ th:nth-child(4) {
 
   .resources-grid {
     grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  }
-
-  .text-nav {
-    display: inline-block;
   }
 
   .admin-page {
