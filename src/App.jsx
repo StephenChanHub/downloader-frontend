@@ -866,21 +866,38 @@ function Pagination({ page, totalPages, total, pageSize, onPageChange, t }) {
 
 function ResourceCard({ item, t, onPreview }) {
   const [downloading, setDownloading] = useState(false);
+  const [progress, setProgress] = useState(0);
   const [error, setError] = useState('');
 
   const handleDownload = async (event) => {
     event.preventDefault();
     setError('');
     setDownloading(true);
+    setProgress(0);
 
     try {
       const res = await downloadFile(item.id);
-      const blob = await res.blob();
+      const contentLength = parseInt(res.headers.get('Content-Length') || '0', 10);
+
+      // Stream the response body to track real-time progress
+      const reader = res.body.getReader();
+      const chunks = [];
+      let received = 0;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+        received += value.length;
+        if (contentLength > 0) {
+          setProgress(Math.round((received / contentLength) * 100));
+        }
+      }
+
+      const blob = new Blob(chunks);
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      // Use the original filename from Content-Disposition if available,
-      // otherwise fall back to title + .pdf
       const disposition = res.headers.get('content-disposition') || '';
       const match = disposition.match(/filename\*=UTF-8''(.+)/);
       a.download = match ? decodeURIComponent(match[1]) : `${item.title}.pdf`;
@@ -892,6 +909,7 @@ function ResourceCard({ item, t, onPreview }) {
       setError(err.message);
     } finally {
       setDownloading(false);
+      setProgress(0);
     }
   };
 
@@ -914,22 +932,29 @@ function ResourceCard({ item, t, onPreview }) {
           className="outline-button resource-preview-button"
           type="button"
           onClick={() => onPreview(item)}
+          disabled={downloading}
         >
           <Icon name="eye" size={15} strokeWidth={2.4} /> {t.preview}
         </button>
-        <button
-          className="outline-button resource-download-button"
-          type="button"
-          onClick={handleDownload}
-          disabled={downloading}
-        >
-          {downloading ? (
-            <Icon name="spinner" size={15} strokeWidth={2.4} />
-          ) : (
-            <Icon name="download" size={15} strokeWidth={2.4} />
-          )}{' '}
-          {downloading ? t.downloading : t.download}
-        </button>
+        {downloading ? (
+          <div className="download-progress">
+            <div className="download-progress__track">
+              <div
+                className="download-progress__fill"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+            <span className="download-progress__pct">{progress}%</span>
+          </div>
+        ) : (
+          <button
+            className="outline-button resource-download-button"
+            type="button"
+            onClick={handleDownload}
+          >
+            <Icon name="download" size={15} strokeWidth={2.4} /> {t.download}
+          </button>
+        )}
       </div>
     </article>
   );
