@@ -1270,6 +1270,53 @@ th:nth-child(4) {
   min-width: 0;
 }
 
+/* ---- Download log table ---- */
+
+.dashboard-log-table {
+  border: 1px solid var(--line);
+  background: #fff;
+  margin-top: 0;
+}
+
+.dashboard-log-table table {
+  min-width: 0;
+}
+
+.dashboard-log-table th {
+  background: var(--soft);
+}
+
+.dashboard-log-table td:nth-child(1),
+.dashboard-log-table th:nth-child(1) {
+  width: 18%;
+}
+
+.dashboard-log-table td:nth-child(2),
+.dashboard-log-table th:nth-child(2) {
+  width: 20%;
+}
+
+.dashboard-log-table td:nth-child(3),
+.dashboard-log-table th:nth-child(3) {
+  width: 42%;
+}
+
+.dashboard-log-table td:nth-child(4),
+.dashboard-log-table th:nth-child(4) {
+  width: 20%;
+}
+
+.log-ip {
+  font-family: "Courier New", monospace;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.log-time {
+  font-size: 13px;
+  color: var(--muted);
+}
+
 .dashboard-top-table {
   border: 1px solid var(--line);
   background: #fff;

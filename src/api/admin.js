@@ -54,3 +54,11 @@ export async function adminDeleteFile(id) {
 export async function adminGetStats() {
   return adminFetch('/api/admin/stats');
 }
+
+/**
+ * GET /api/admin/download-logs
+ * Returns: array of { id, ip, key_id, key_prefix, file_title, file_id, downloaded_at }
+ */
+export async function adminGetDownloadLogs() {
+  return adminFetch('/api/admin/download-logs');
+}

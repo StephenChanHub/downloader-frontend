@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { adminLogin, adminListFiles, adminUploadFile, adminDeleteFile, adminGetStats } from './api/admin';
+import { adminLogin, adminListFiles, adminUploadFile, adminDeleteFile, adminGetDownloadLogs } from './api/admin';
 import { verifyAccessKey } from './api/auth';
 import { fetchFileList, downloadFile } from './api/files';
 import { formatFileSize, formatRemainingTime } from './utils/format';
@@ -188,6 +188,7 @@ const copy = {
     rank: 'RANK',
     dashboardDesc: 'System overview and key metrics at a glance.',
     noStats: 'Unable to load statistics.',
+    downloadLogs: 'Download Logs',
   },
   zh: {
     languageLabel: '语言',
@@ -283,6 +284,7 @@ const copy = {
     rank: '排名',
     dashboardDesc: '系统概览与关键指标一览。',
     noStats: '无法加载统计数据。',
+    downloadLogs: '下载日志',
   },
 };
 
@@ -1174,8 +1176,8 @@ const AdminPage = memo(function AdminPage({ onSignOut, t }) {
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
   const [selectedFile, setSelectedFile] = useState(null);
-  const [stats, setStats] = useState(null);
-  const [statsLoading, setStatsLoading] = useState(true);
+  const [downloadLogs, setDownloadLogs] = useState(null);
+  const [logsLoading, setLogsLoading] = useState(true);
   const [collapsedFolders, setCollapsedFolders] = useState(new Set());
   const fileInputRef = useRef(null);
 
@@ -1205,21 +1207,28 @@ const AdminPage = memo(function AdminPage({ onSignOut, t }) {
     loadFiles();
   }, [loadFiles]);
 
-  // Load dashboard stats
+  // Storage computed from actual files (always reliable)
+  const totalUsed = useMemo(
+    () => files.reduce((sum, f) => sum + (f.size || 0), 0),
+    [files],
+  );
+  const STORAGE_CAPACITY = 10 * 1024 * 1024 * 1024; // 10 GB
+
+  // Load download logs
   useEffect(() => {
     let cancelled = false;
-    async function loadStats() {
-      setStatsLoading(true);
+    async function loadLogs() {
+      setLogsLoading(true);
       try {
-        const data = await adminGetStats();
-        if (!cancelled) setStats(data);
+        const data = await adminGetDownloadLogs();
+        if (!cancelled) setDownloadLogs(Array.isArray(data) ? data : []);
       } catch {
-        if (!cancelled) setStats(null);
+        if (!cancelled) setDownloadLogs(null);
       } finally {
-        if (!cancelled) setStatsLoading(false);
+        if (!cancelled) setLogsLoading(false);
       }
     }
-    loadStats();
+    loadLogs();
     return () => { cancelled = true; };
   }, []);
 
@@ -1360,83 +1369,67 @@ const AdminPage = memo(function AdminPage({ onSignOut, t }) {
             <p>{t.dashboardDesc}</p>
           </header>
 
-          {statsLoading && <p className="resources-empty">{t.downloading}</p>}
-          {!statsLoading && !stats && <p className="resources-empty">{t.noStats}</p>}
-          {!statsLoading && stats && (
-            <>
-              <div className="stats-cards">
-                <div className="stat-card">
-                  <div className="stat-card__icon stat-card__icon--storage">
-                    <Icon name="database" size={24} />
-                  </div>
-                  <div className="stat-card__body">
-                    <span className="stat-card__label">{t.totalStorage}</span>
-                    <strong className="stat-card__value">{formatFileSize(stats.totalStorage || 0)}</strong>
-                    <span className="stat-card__sub">{formatFileSize(Math.max(0, 10 * 1024 * 1024 * 1024 - (stats.totalStorage || 0)))} {t.storageAvailable}</span>
-                    <div className="storage-bar">
-                      <div
-                        className="storage-bar__fill"
-                        style={{ width: `${Math.min(100, ((stats.totalStorage || 0) / (10 * 1024 * 1024 * 1024)) * 100)}%` }}
-                      />
-                    </div>
-                  </div>
-                </div>
-                <div className="stat-card">
-                  <div className="stat-card__icon stat-card__icon--visitors">
-                    <Icon name="users" size={24} />
-                  </div>
-                  <div className="stat-card__body">
-                    <span className="stat-card__label">{t.todayVisitors}</span>
-                    <strong className="stat-card__value">{stats.todayVisitors ?? 0}</strong>
-                  </div>
-                </div>
-                <div className="stat-card">
-                  <div className="stat-card__icon stat-card__icon--downloads">
-                    <Icon name="trending-up" size={24} />
-                  </div>
-                  <div className="stat-card__body">
-                    <span className="stat-card__label">{t.todayDownloads}</span>
-                    <strong className="stat-card__value">{stats.todayDownloads ?? 0}</strong>
-                  </div>
+          <div className="stats-cards">
+            <div className="stat-card">
+              <div className="stat-card__icon stat-card__icon--storage">
+                <Icon name="database" size={24} />
+              </div>
+              <div className="stat-card__body">
+                <span className="stat-card__label">{t.totalStorage}</span>
+                <strong className="stat-card__value">{formatFileSize(totalUsed)}</strong>
+                <span className="stat-card__sub">
+                  {formatFileSize(Math.max(0, STORAGE_CAPACITY - totalUsed))} {t.storageAvailable}
+                </span>
+                <div className="storage-bar">
+                  <div
+                    className="storage-bar__fill"
+                    style={{ width: `${Math.min(100, (totalUsed / STORAGE_CAPACITY) * 100)}%` }}
+                  />
                 </div>
               </div>
+            </div>
+          </div>
 
-              <div className="dashboard-top-table">
-                <div className="dashboard-top-header">
-                  <Icon name="award" size={20} />
-                  <h3>{t.topDownloads}</h3>
-                </div>
-                {stats.topDownloads && stats.topDownloads.length > 0 ? (
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>{t.rank}</th>
-                        <th>{t.tableTitle}</th>
-                        <th>{t.tableDownloads}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {stats.topDownloads.map((item, idx) => (
-                        <tr key={item.id || idx}>
-                          <td className="top-rank">#{idx + 1}</td>
-                          <td>
-                            <span className="admin-file-title">
-                              <Icon name="file" size={18} />
-                              <span className="file-type-badge file-type-badge--sm">{getFileExt(item)}</span>
-                              {item.title}
-                            </span>
-                          </td>
-                          <td>{item.download_count ?? 0}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                ) : (
-                  <p className="resources-empty" style={{ padding: 24 }}>{t.noFiles}</p>
-                )}
-              </div>
-            </>
-          )}
+          <div className="dashboard-log-table">
+            <div className="dashboard-top-header">
+              <Icon name="download" size={20} />
+              <h3>{t.downloadLogs || 'Download Logs / 下载日志'}</h3>
+            </div>
+            {logsLoading && <p style={{ padding: 24 }}>{t.downloading}</p>}
+            {!logsLoading && !downloadLogs && <p style={{ padding: 24 }}>{t.noStats}</p>}
+            {!logsLoading && downloadLogs && downloadLogs.length === 0 && (
+              <p style={{ padding: 24 }}>{t.noFiles}</p>
+            )}
+            {!logsLoading && downloadLogs && downloadLogs.length > 0 && (
+              <table>
+                <thead>
+                  <tr>
+                    <th>IP</th>
+                    <th>Key ID / 密钥</th>
+                    <th>File / 文件</th>
+                    <th>Time / 时间</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {downloadLogs.map((log) => (
+                    <tr key={log.id}>
+                      <td className="log-ip">{log.ip || '—'}</td>
+                      <td>
+                        <span className="folder-tag">{log.key_prefix || log.key_id || '—'}</span>
+                      </td>
+                      <td>
+                        <span className="admin-file-title">
+                          <Icon name="file" size={18} />
+                          {log.file_title || '—'}
+                        </span>
+                      </td>
+                      <td className="log-time">{log.downloaded_at ? new Date(log.downloaded_at).toLocaleString() : '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
         </section>
       )}
 
