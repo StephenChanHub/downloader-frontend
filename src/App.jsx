@@ -71,6 +71,12 @@ function isNonEmptyKey(key) {
   return key.trim().length > 0;
 }
 
+function getFileExt(file) {
+  const name = file.original_name || file.title || '';
+  const dot = name.lastIndexOf('.');
+  return dot > -1 ? name.slice(dot + 1).toUpperCase() : 'PDF';
+}
+
 function createRandomSyncMinutes() {
   return Math.floor(Math.random() * (24 * 60 - 1)) + 1;
 }
@@ -917,6 +923,7 @@ function ResourceCard({ item, t, onPreview }) {
     <article className="resource-card">
       <div className="resource-card__top">
         <div className="resource-icon"><Icon name="file" size={25} strokeWidth={2.2} /></div>
+        <span className="file-type-badge">{getFileExt(item)}</span>
         <span className="resource-card__size">{formatFileSize(item.size)}</span>
         {item.download_count > 0 && (
           <span className="download-count-badge">{item.download_count} {t.downloadsBadge}</span>
@@ -1414,7 +1421,9 @@ const AdminPage = memo(function AdminPage({ onSignOut, t }) {
                           <td className="top-rank">#{idx + 1}</td>
                           <td>
                             <span className="admin-file-title">
-                              <Icon name="file" size={18} /> {item.title}
+                              <Icon name="file" size={18} />
+                              <span className="file-type-badge file-type-badge--sm">{getFileExt(item)}</span>
+                              {item.title}
                             </span>
                           </td>
                           <td>{item.download_count ?? 0}</td>
@@ -1560,7 +1569,9 @@ const AdminPage = memo(function AdminPage({ onSignOut, t }) {
                             <tr key={file.id}>
                               <td>
                                 <span className="admin-file-title">
-                                  <Icon name="file" size={18} /> {file.title}
+                                  <Icon name="file" size={18} />
+                                  <span className="file-type-badge file-type-badge--sm">{getFileExt(file)}</span>
+                                  {file.title}
                                 </span>
                               </td>
                               <td className="admin-file-size">{formatFileSize(file.size)}</td>

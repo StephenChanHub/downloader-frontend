@@ -395,6 +395,29 @@ select:focus,
   color: #000;
 }
 
+.file-type-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 7px;
+  background: #e8eefc;
+  color: #1d4ed8;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  align-self: center;
+  margin-left: 8px;
+}
+
+.file-type-badge--sm {
+  height: 18px;
+  padding: 0 5px;
+  font-size: 9px;
+  margin-left: 0;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+
 .resource-card__size {
   font-family: "Courier New", monospace;
   color: var(--muted);
