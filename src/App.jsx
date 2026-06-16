@@ -921,7 +921,14 @@ function ResourceCard({ item, t, onPreview }) {
       a.href = url;
       const disposition = res.headers.get('content-disposition') || '';
       const match = disposition.match(/filename\*=UTF-8''(.+)/);
-      a.download = match ? decodeURIComponent(match[1]) : `${item.title}.pdf`;
+      if (match) {
+        a.download = decodeURIComponent(match[1]);
+      } else {
+        // Derive extension from mime_type or original_name — never blindly append .pdf
+        const ext = getFileExt(item).toLowerCase();
+        const name = item.original_name || item.title || 'download';
+        a.download = name.includes('.') ? name : `${name}.${ext}`;
+      }
       document.body.appendChild(a);
       a.click();
       a.remove();
