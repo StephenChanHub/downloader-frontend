@@ -79,9 +79,10 @@ export async function userFetch(path, options = {}) {
  * Fetch wrapper for user file downloads that returns the raw Response.
  * Does NOT parse as JSON — the response is a PDF binary stream.
  */
-export async function userDownloadFetch(fileId) {
+export async function userDownloadFetch(fileId, signal) {
   const res = await fetch(`${API_BASE}/api/files/${fileId}/download`, {
     credentials: 'include',
+    signal,
   });
 
   if (!res.ok) {

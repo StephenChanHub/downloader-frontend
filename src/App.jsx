@@ -889,6 +889,13 @@ function ResourceCard({ item, t, onPreview }) {
   const [downloading, setDownloading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState('');
+  const abortRef = useRef(null);
+
+  const handleCancelDownload = () => {
+    if (abortRef.current) {
+      abortRef.current.abort();
+    }
+  };
 
   const handleDownload = async (event) => {
     event.preventDefault();
@@ -896,8 +903,11 @@ function ResourceCard({ item, t, onPreview }) {
     setDownloading(true);
     setProgress(0);
 
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     try {
-      const res = await downloadFile(item.id);
+      const res = await downloadFile(item.id, controller.signal);
       const contentLength = parseInt(res.headers.get('Content-Length') || '0', 10);
 
       // Stream the response body to track real-time progress
@@ -934,10 +944,13 @@ function ResourceCard({ item, t, onPreview }) {
       a.remove();
       URL.revokeObjectURL(url);
     } catch (err) {
-      setError(err.message);
+      if (err.name !== 'AbortError') {
+        setError(err.message);
+      }
     } finally {
       setDownloading(false);
       setProgress(0);
+      abortRef.current = null;
     }
   };
 
@@ -974,6 +987,14 @@ function ResourceCard({ item, t, onPreview }) {
               />
             </div>
             <span className="download-progress__pct">{progress}%</span>
+            <button
+              className="download-cancel-btn"
+              type="button"
+              onClick={handleCancelDownload}
+              title="Cancel download"
+            >
+              ✕
+            </button>
           </div>
         ) : (
           <button
