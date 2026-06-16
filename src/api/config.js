@@ -2,7 +2,7 @@
 // Production backend:  https://cjdfnwwofgct.sealosgzg.site
 // Development backend: http://localhost:8080 (with CRA proxy in package.json)
 
-const API_BASE = process.env.REACT_APP_API_BASE || '';
+export const API_BASE = process.env.REACT_APP_API_BASE || '';
 
 // ---- shared fetch wrappers -------------------------------------------------
 

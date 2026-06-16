@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { adminLogin, adminListFiles, adminUploadFile, adminDeleteFile, adminGetDownloadLogs } from './api/admin';
+import { adminLogin, adminListFiles, adminUploadFileWithProgress, adminDeleteFile, adminGetDownloadLogs } from './api/admin';
 import { verifyAccessKey } from './api/auth';
 import { fetchFileList, downloadFile } from './api/files';
 import { formatFileSize, formatRemainingTime } from './utils/format';
@@ -72,9 +72,22 @@ function isNonEmptyKey(key) {
 }
 
 function getFileExt(file) {
+  // Prefer server-side magic-byte detection
+  if (file.detected_type) return file.detected_type;
+  if (file.mime_type === 'application/pdf') return 'PDF';
+  if (file.mime_type && file.mime_type !== 'application/octet-stream') {
+    const m = file.mime_type.split('/')[1];
+    if (m) return m.toUpperCase();
+  }
+  // Fall back to filename extension
   const name = file.original_name || file.title || '';
   const dot = name.lastIndexOf('.');
-  return dot > -1 ? name.slice(dot + 1).toUpperCase() : 'PDF';
+  return dot > -1 ? name.slice(dot + 1).toUpperCase() : '?';
+}
+
+function isArchiveType(file) {
+  const ext = getFileExt(file);
+  return !['PDF', '?'].includes(ext);
 }
 
 function createRandomSyncMinutes() {
@@ -148,8 +161,8 @@ const copy = {
     folderNameHint: 'Files are physically stored together; folder name is a logical tag for access control.',
     filePayload: 'FILE PAYLOAD',
     dropZoneText: 'Click to browse or drag',
-    dropZonePdf: 'PDF here',
-    maxSize: 'Max size: 100MB',
+    dropZonePdf: 'files here',
+    maxSize: 'PDF, ZIP, RAR, 7z, GZ, TAR, BZ2, XZ · Max 500MB',
     processUpload: 'Process Upload',
     resourceManagement: 'Resource Management',
     managementDescription: 'Encrypted files currently distributed.',
@@ -244,8 +257,8 @@ const copy = {
     folderNameHint: '文件物理存储在一起；文件夹名仅作为访问控制的逻辑标签。',
     filePayload: '文件载荷',
     dropZoneText: '点击浏览或拖拽',
-    dropZonePdf: 'PDF 到此处',
-    maxSize: '最大：100MB',
+    dropZonePdf: '文件到此处',
+    maxSize: '支持 PDF、ZIP、RAR、7z、GZ、TAR、BZ2、XZ · 最大 500MB',
     processUpload: '处理上传',
     resourceManagement: '资源管理',
     managementDescription: '当前正在分发的加密文件。',
@@ -925,7 +938,7 @@ function ResourceCard({ item, t, onPreview }) {
     <article className="resource-card">
       <div className="resource-card__top">
         <div className="resource-icon"><Icon name="file" size={25} strokeWidth={2.2} /></div>
-        <span className="file-type-badge">{getFileExt(item)}</span>
+        <span className={`file-type-badge ${isArchiveType(item) ? 'file-type-badge--archive' : ''}`}>{getFileExt(item)}</span>
         <span className="resource-card__size">{formatFileSize(item.size)}</span>
         {item.download_count > 0 && (
           <span className="download-count-badge">{item.download_count} {t.downloadsBadge}</span>
@@ -1174,6 +1187,7 @@ const AdminPage = memo(function AdminPage({ onSignOut, t }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadError, setUploadError] = useState('');
   const [selectedFile, setSelectedFile] = useState(null);
   const [downloadLogs, setDownloadLogs] = useState(null);
@@ -1240,6 +1254,7 @@ const AdminPage = memo(function AdminPage({ onSignOut, t }) {
     }
 
     setUploading(true);
+    setUploadProgress(0);
     setUploadError('');
 
     try {
@@ -1249,11 +1264,12 @@ const AdminPage = memo(function AdminPage({ onSignOut, t }) {
       if (description.trim()) formData.append('description', description.trim());
       formData.append('folder_name', folderName.trim() || 'default');
 
-      await adminUploadFile(formData);
+      await adminUploadFileWithProgress(formData, setUploadProgress);
       setTitle('');
       setDescription('');
       setFolderName('');
       setSelectedFile(null);
+      setUploadProgress(0);
       if (fileInputRef.current) fileInputRef.current.value = '';
       await loadFiles();
     } catch (err) {
@@ -1489,7 +1505,7 @@ const AdminPage = memo(function AdminPage({ onSignOut, t }) {
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept="application/pdf"
+                  accept=".pdf,.zip,.rar,.7z,.gz,.tar,.bz2,.xz,.tgz"
                   hidden
                   onChange={handleFileChange}
                 />
@@ -1497,12 +1513,28 @@ const AdminPage = memo(function AdminPage({ onSignOut, t }) {
 
               {uploadError && <p className="form-error" role="alert">{uploadError}</p>}
 
+              {uploading && (
+                <div className="upload-progress">
+                  <div className="upload-progress__track">
+                    <div
+                      className="upload-progress__fill"
+                      style={{ width: `${uploadProgress}%` }}
+                    />
+                  </div>
+                  <span className="upload-progress__pct">{uploadProgress}%</span>
+                </div>
+              )}
+
               <button
                 className="primary-button process-button"
                 type="submit"
                 disabled={uploading || !selectedFile}
               >
-                {uploading ? <Icon name="spinner" size={17} /> : t.processUpload}
+                {uploading ? (
+                  <><Icon name="spinner" size={17} /> {t.uploading}</>
+                ) : (
+                  t.processUpload
+                )}
               </button>
             </form>
           </div>
@@ -1563,7 +1595,7 @@ const AdminPage = memo(function AdminPage({ onSignOut, t }) {
                               <td>
                                 <span className="admin-file-title">
                                   <Icon name="file" size={18} />
-                                  <span className="file-type-badge file-type-badge--sm">{getFileExt(file)}</span>
+                                  <span className={`file-type-badge file-type-badge--sm ${isArchiveType(file) ? 'file-type-badge--archive' : ''}`}>{getFileExt(file)}</span>
                                   {file.title}
                                 </span>
                               </td>

@@ -418,6 +418,11 @@ select:focus,
   vertical-align: middle;
 }
 
+.file-type-badge--archive {
+  background: #fef3c7;
+  color: #b45309;
+}
+
 .resource-card__size {
   font-family: "Courier New", monospace;
   color: var(--muted);
@@ -1007,6 +1012,39 @@ th:nth-child(4) {
   text-align: right;
 }
 
+/* ---- Upload progress bar ---- */
+
+.upload-progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 252px;
+  margin-bottom: 16px;
+}
+
+.upload-progress__track {
+  flex: 1;
+  height: 8px;
+  background: #e5e5e5;
+  overflow: hidden;
+}
+
+.upload-progress__fill {
+  height: 100%;
+  background: #000;
+  transition: width 0.15s ease;
+  min-width: 0;
+}
+
+.upload-progress__pct {
+  font-family: "Courier New", monospace;
+  font-size: 12px;
+  font-weight: 700;
+  color: #000;
+  min-width: 36px;
+  text-align: right;
+}
+
 .resource-preview-button {
   width: 100%;
   letter-spacing: 0.05em;
@@ -1382,7 +1420,7 @@ th:nth-child(4) {
 }
 
 .folder-group:not(:last-child) {
-  border-bottom: 3px solid #c8c2c2;
+  border-bottom: 5px solid #ffffff;
 }
 
 .folder-group__header {
