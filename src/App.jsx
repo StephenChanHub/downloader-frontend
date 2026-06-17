@@ -1057,11 +1057,12 @@ function ResourcesPage({ onLock, onAdminLogin, t, sessionExpiresAt, lastSyncMinu
         const data = await fetchFileList({ page, limit: PAGE_SIZE, search });
         if (!cancelled) {
           // Backend may return a plain array (no pagination) or { total, files }
+          const sortBySize = (arr) => [...arr].sort((a, b) => (b.size || 0) - (a.size || 0));
           if (Array.isArray(data)) {
-            setFiles(data);
+            setFiles(sortBySize(data));
             setTotal(data.length);
           } else {
-            setFiles(data.files || []);
+            setFiles(sortBySize(data.files || []));
             setTotal(data.total || 0);
           }
         }
