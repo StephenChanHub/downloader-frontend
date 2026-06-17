@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { adminLogin, adminListFiles, adminUploadFileWithProgress, adminDeleteFile, adminGetDownloadLogs } from './api/admin';
+import { adminLogin, adminListFiles, adminUploadFileWithProgress, adminUpdateFile, adminDeleteFile, adminGetDownloadLogs } from './api/admin';
 import { verifyAccessKey } from './api/auth';
 import { fetchFileList, downloadFile } from './api/files';
 import { formatFileSize, formatRemainingTime } from './utils/format';
@@ -164,6 +164,9 @@ const copy = {
     dropZonePdf: 'files here',
     maxSize: 'PDF, ZIP, RAR, 7z, GZ, TAR, BZ2, XZ · Max 500MB',
     processUpload: 'Process Upload',
+    updateInfo: 'Update Info',
+    cancelEdit: 'Cancel Edit',
+    editHint: 'Double-click a file icon to edit its metadata here.',
     resourceManagement: 'Resource Management',
     managementDescription: 'Encrypted files currently distributed.',
     searchResources: 'Search resources...',
@@ -260,6 +263,9 @@ const copy = {
     dropZonePdf: '文件到此处',
     maxSize: '支持 PDF、ZIP、RAR、7z、GZ、TAR、BZ2、XZ · 最大 500MB',
     processUpload: '处理上传',
+    updateInfo: '更新信息',
+    cancelEdit: '取消编辑',
+    editHint: '双击文件图标可在此处编辑其元数据。',
     resourceManagement: '资源管理',
     managementDescription: '当前正在分发的加密文件。',
     searchResources: '搜索资源...',
@@ -967,6 +973,10 @@ function ResourceCard({ item, t, onPreview }) {
 
       <h2>{item.title}</h2>
 
+      {item.description && (
+        <p className="resource-card__desc">{item.description}</p>
+      )}
+
       {error && <p className="form-error" role="alert">{error}</p>}
 
       <div className="resource-card-actions">
@@ -1220,6 +1230,7 @@ const AdminPage = memo(function AdminPage({ onSignOut, t }) {
   const [selectedFile, setSelectedFile] = useState(null);
   const [downloadLogs, setDownloadLogs] = useState(null);
   const [logsLoading, setLogsLoading] = useState(true);
+  const [editingFileId, setEditingFileId] = useState(null);
   const [collapsedFolders, setCollapsedFolders] = useState(new Set());
   const fileInputRef = useRef(null);
 
@@ -1274,32 +1285,69 @@ const AdminPage = memo(function AdminPage({ onSignOut, t }) {
     return () => { cancelled = true; };
   }, []);
 
-  const handleUpload = async (event) => {
-    event.preventDefault();
-    if (!selectedFile) {
-      setUploadError(t.emptyKeyError);
-      return;
-    }
+  const isEditing = editingFileId !== null;
 
-    setUploading(true);
-    setUploadProgress(0);
+  const handleDoubleClickFile = (file) => {
+    setEditingFileId(file.id);
+    setTitle(file.title || '');
+    setDescription(file.description || '');
+    setFolderName(file.folder_name || '');
+    setSelectedFile(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
     setUploadError('');
+    setUploadProgress(0);
+  };
+
+  const cancelEdit = () => {
+    setEditingFileId(null);
+    setTitle('');
+    setDescription('');
+    setFolderName('');
+    setSelectedFile(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    setUploadError('');
+  };
+
+  const handleSubmitForm = async (event) => {
+    event.preventDefault();
+    setUploadError('');
+    setUploading(true);
 
     try {
-      const formData = new FormData();
-      formData.append('file', selectedFile);
-      if (title.trim()) formData.append('title', title.trim());
-      if (description.trim()) formData.append('description', description.trim());
-      formData.append('folder_name', folderName.trim() || 'default');
+      if (isEditing) {
+        // Update existing file metadata
+        const updates = {};
+        if (title.trim()) updates.title = title.trim();
+        if (description.trim()) updates.description = description.trim();
+        if (folderName.trim()) updates.folder_name = folderName.trim();
 
-      await adminUploadFileWithProgress(formData, setUploadProgress);
-      setTitle('');
-      setDescription('');
-      setFolderName('');
-      setSelectedFile(null);
-      setUploadProgress(0);
-      if (fileInputRef.current) fileInputRef.current.value = '';
-      await loadFiles();
+        const updated = await adminUpdateFile(editingFileId, updates);
+        setFiles((prev) => prev.map((f) => (f.id === editingFileId ? updated : f)));
+        cancelEdit();
+      } else {
+        // Upload new file
+        if (!selectedFile) {
+          setUploadError(t.emptyKeyError);
+          setUploading(false);
+          return;
+        }
+        setUploadProgress(0);
+        const formData = new FormData();
+        formData.append('file', selectedFile);
+        if (title.trim()) formData.append('title', title.trim());
+        if (description.trim()) formData.append('description', description.trim());
+        formData.append('folder_name', folderName.trim() || 'default');
+
+        await adminUploadFileWithProgress(formData, setUploadProgress);
+        setTitle('');
+        setDescription('');
+        setFolderName('');
+        setSelectedFile(null);
+        setUploadProgress(0);
+        setEditingFileId(null);
+        if (fileInputRef.current) fileInputRef.current.value = '';
+        await loadFiles();
+      }
     } catch (err) {
       if (err.status === 401) {
         onSignOut();
@@ -1486,7 +1534,14 @@ const AdminPage = memo(function AdminPage({ onSignOut, t }) {
               <p>{t.uploadDescription}</p>
             </header>
 
-            <form className="upload-card upload-card--compact" onSubmit={handleUpload}>
+            <form className="upload-card upload-card--compact" onSubmit={handleSubmitForm}>
+              {isEditing && (
+                <div className="edit-banner">
+                  <Icon name="file" size={16} />
+                  <span>{t.editHint}</span>
+                </div>
+              )}
+
               <label className="form-label" htmlFor="documentTitle">{t.documentTitle}</label>
               <input
                 id="documentTitle"
@@ -1494,6 +1549,7 @@ const AdminPage = memo(function AdminPage({ onSignOut, t }) {
                 value={title}
                 onChange={(event) => setTitle(event.target.value)}
                 placeholder={t.documentTitlePlaceholder}
+                maxLength={200}
               />
 
               <label className="form-label" htmlFor="documentDescription">DESCRIPTION / 描述</label>
@@ -1504,6 +1560,7 @@ const AdminPage = memo(function AdminPage({ onSignOut, t }) {
                 onChange={(event) => setDescription(event.target.value)}
                 placeholder="Optional description / notes"
                 rows={3}
+                maxLength={2000}
                 style={{ height: 'auto', padding: '8px 13px', resize: 'vertical' }}
               />
 
@@ -1514,34 +1571,39 @@ const AdminPage = memo(function AdminPage({ onSignOut, t }) {
                 value={folderName}
                 onChange={(event) => setFolderName(event.target.value)}
                 placeholder={t.folderNamePlaceholder}
+                maxLength={50}
               />
               <small className="folder-hint">{t.folderNameHint}</small>
 
-              <label className="form-label">{t.filePayload}</label>
-              <button
-                type="button"
-                className="drop-zone"
-                onClick={() => fileInputRef.current?.click()}
-              >
-                <Icon name="upload" size={34} />
-                {selectedFile ? (
-                  <span>{selectedFile.name}</span>
-                ) : (
-                  <span>{t.dropZoneText}<br />{t.dropZonePdf}</span>
-                )}
-                <small>{t.maxSize}</small>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".pdf,.zip,.rar,.7z,.gz,.tar,.bz2,.xz,.tgz"
-                  hidden
-                  onChange={handleFileChange}
-                />
-              </button>
+              {!isEditing && (
+                <>
+                  <label className="form-label">{t.filePayload}</label>
+                  <button
+                    type="button"
+                    className="drop-zone"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <Icon name="upload" size={34} />
+                    {selectedFile ? (
+                      <span>{selectedFile.name}</span>
+                    ) : (
+                      <span>{t.dropZoneText}<br />{t.dropZonePdf}</span>
+                    )}
+                    <small>{t.maxSize}</small>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".pdf,.zip,.rar,.7z,.gz,.tar,.bz2,.xz,.tgz"
+                      hidden
+                      onChange={handleFileChange}
+                    />
+                  </button>
+                </>
+              )}
 
               {uploadError && <p className="form-error" role="alert">{uploadError}</p>}
 
-              {uploading && (
+              {uploading && !isEditing && (
                 <div className="upload-progress">
                   <div className="upload-progress__track">
                     <div
@@ -1553,17 +1615,31 @@ const AdminPage = memo(function AdminPage({ onSignOut, t }) {
                 </div>
               )}
 
-              <button
-                className="primary-button process-button"
-                type="submit"
-                disabled={uploading || !selectedFile}
-              >
-                {uploading ? (
-                  <><Icon name="spinner" size={17} /> {t.uploading}</>
-                ) : (
-                  t.processUpload
+              <div className="form-actions">
+                {isEditing && (
+                  <button
+                    className="secondary-button"
+                    type="button"
+                    onClick={cancelEdit}
+                    disabled={uploading}
+                  >
+                    {t.cancelEdit}
+                  </button>
                 )}
-              </button>
+                <button
+                  className="primary-button process-button"
+                  type="submit"
+                  disabled={uploading || (!isEditing && !selectedFile)}
+                >
+                  {uploading ? (
+                    <><Icon name="spinner" size={17} /> {t.uploading}</>
+                  ) : isEditing ? (
+                    t.updateInfo
+                  ) : (
+                    t.processUpload
+                  )}
+                </button>
+              </div>
             </form>
           </div>
 
@@ -1621,11 +1697,22 @@ const AdminPage = memo(function AdminPage({ onSignOut, t }) {
                           {group.files.map((file) => (
                             <tr key={file.id}>
                               <td>
-                                <span className="admin-file-title">
-                                  <Icon name="file" size={18} />
-                                  <span className={`file-type-badge file-type-badge--sm ${isArchiveType(file) ? 'file-type-badge--archive' : ''}`}>{getFileExt(file)}</span>
-                                  {file.title}
-                                </span>
+                                <div className="admin-file-cell">
+                                  <span
+                                    className="admin-file-icon"
+                                    onDoubleClick={() => handleDoubleClickFile(file)}
+                                    title={t.editHint}
+                                  >
+                                    <Icon name="file" size={18} />
+                                  </span>
+                                  <span
+                                    className="admin-file-title"
+                                    title={file.description || undefined}
+                                  >
+                                    <span className={`file-type-badge file-type-badge--sm ${isArchiveType(file) ? 'file-type-badge--archive' : ''}`}>{getFileExt(file)}</span>
+                                    {file.title}
+                                  </span>
+                                </div>
                               </td>
                               <td className="admin-file-size">{formatFileSize(file.size)}</td>
                               <td>{file.download_count ?? 0}</td>

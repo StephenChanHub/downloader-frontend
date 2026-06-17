@@ -82,6 +82,18 @@ export function adminUploadFileWithProgress(formData, onProgress) {
 }
 
 /**
+ * PATCH /api/admin/files/:id
+ * Body: { title?, description?, folder_name? }
+ * Returns: updated file object
+ */
+export async function adminUpdateFile(id, updates) {
+  return adminFetch(`/api/admin/files/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(updates),
+  });
+}
+
+/**
  * DELETE /api/admin/files/:id
  * Returns: { success: true, message: "..." }
  */
